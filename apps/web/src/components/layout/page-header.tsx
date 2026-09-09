@@ -6,7 +6,8 @@ export function PageHeader({
   actions,
 }: {
   title: string;
-  description?: string;
+  /** ReactNode, not string: detail pages link back to their parent from here. */
+  description?: React.ReactNode;
   actions?: React.ReactNode;
 }) {
   return (
@@ -14,7 +15,7 @@ export function PageHeader({
       <div className="min-w-0">
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         {description ? (
-          <p className="mt-1 text-sm text-muted-foreground text-balance">{description}</p>
+          <div className="mt-1 text-sm text-muted-foreground text-balance">{description}</div>
         ) : null}
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}

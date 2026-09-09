@@ -66,6 +66,14 @@ export async function resetDatabase(prisma: PrismaService): Promise<void> {
     prisma.$executeRawUnsafe('DELETE FROM "Session"'),
     prisma.$executeRawUnsafe('DELETE FROM "PasswordResetToken"'),
     prisma.$executeRawUnsafe('DELETE FROM "EmailVerificationToken"'),
+    // Portfolio, innermost first: Unit references Building and Property,
+    // Building references Property, StaffAssignment references both User and
+    // Property. Getting this order wrong shows up as a foreign key violation,
+    // which is the point — the constraints are real.
+    prisma.$executeRawUnsafe('DELETE FROM "StaffAssignment"'),
+    prisma.$executeRawUnsafe('DELETE FROM "Unit"'),
+    prisma.$executeRawUnsafe('DELETE FROM "Building"'),
+    prisma.$executeRawUnsafe('DELETE FROM "Property"'),
     prisma.$executeRawUnsafe('DELETE FROM "UserRole"'),
     prisma.$executeRawUnsafe('DELETE FROM "Settings"'),
     prisma.$executeRawUnsafe('DELETE FROM "User"'),

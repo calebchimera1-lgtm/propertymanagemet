@@ -7,6 +7,7 @@ import { UnauthenticatedError } from '@/common/errors/domain.errors';
 import { AppConfig } from '@/config/app.config';
 import { PermissionsService } from '@/modules/permissions/permissions.service';
 import { SessionService } from '@/modules/auth/session.service';
+import { PropertyScopeService } from '@/tenancy/property-scope.service';
 import type { AuthContext } from '@/tenancy/tenant-context';
 import { TenantContextService } from '@/tenancy/tenant-context.service';
 
@@ -24,6 +25,7 @@ export class SessionAuthGuard implements CanActivate {
     private readonly sessions: SessionService,
     private readonly permissions: PermissionsService,
     private readonly tenant: TenantContextService,
+    private readonly propertyScope: PropertyScopeService,
     private readonly config: AppConfig,
   ) {}
 
@@ -53,6 +55,7 @@ export class SessionAuthGuard implements CanActivate {
     }
 
     const { roles, permissions } = await this.permissions.forUser(session.userId);
+    const scopedPropertyIds = await this.propertyScope.resolve(session.userId, roles);
 
     const auth: AuthContext = {
       sessionId: session.id,
@@ -61,10 +64,9 @@ export class SessionAuthGuard implements CanActivate {
       email: session.user.email,
       roles,
       permissions,
-      // Property scoping needs the Property and StaffAssignment tables, which
-      // arrive in Phase 2. Until then every authenticated user is unrestricted
-      // within their own organization, which is already enforced above.
-      scopedPropertyIds: null,
+      // null for owners and managers; a (possibly empty) id list for the
+      // property-scoped roles. Resolved from StaffAssignment, never from input.
+      scopedPropertyIds,
     };
 
     request.auth = auth;

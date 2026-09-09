@@ -1,10 +1,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Property Management SaaS — database schema (source of truth)
 //
-// Phase 1 covers identity and tenancy only: organizations, users, sessions,
-// roles, permissions, tokens, settings and the audit trail that the auth flows
-// already write to. Portfolio, occupancy, money and operations models arrive in
-// Phases 2–5 exactly as designed in docs/BLUEPRINT.md.
+// Phase 1 covers identity and tenancy: organizations, users, sessions, roles,
+// permissions, tokens, settings and the audit trail.
+// Phase 2 adds the portfolio: properties, buildings, units and the staff
+// assignments that scope a caretaker or accountant to particular properties.
+// Occupancy, money and operations arrive in Phases 3–5 as designed in
+// docs/BLUEPRINT.md.
 //
 // Conventions (blueprint §7):
 //   • ids are cuid strings — opaque, non-enumerable, safe in URLs
@@ -38,6 +40,50 @@ enum UserStatus {
   SUSPENDED
 }
 
+enum PropertyType {
+  APARTMENT
+  RESIDENTIAL
+  COMMERCIAL
+  OFFICE
+  SHOPS
+  WAREHOUSE
+  MIXED_USE
+  OTHER
+}
+
+enum PropertyStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum BuildingStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum UnitType {
+  BEDSITTER
+  STUDIO
+  ONE_BEDROOM
+  TWO_BEDROOM
+  THREE_BEDROOM
+  FOUR_BEDROOM
+  SHOP
+  OFFICE
+  WAREHOUSE
+  OTHER
+}
+
+enum UnitStatus {
+  VACANT
+  OCCUPIED
+  RESERVED
+  MAINTENANCE
+  UNAVAILABLE
+}
+
 enum RoleName {
   SUPER_ADMIN
   PROPERTY_OWNER
@@ -69,13 +115,20 @@ model Organization {
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
 
-  users     User[]
-  roles     Role[]
-  userRoles UserRole[]
-  sessions  Session[]
-  settings  Settings?
-  auditLogs AuditLog[]
+  users            User[]
+  roles            Role[]
+  userRoles        UserRole[]
+  sessions         Session[]
+  settings         Settings?
+  auditLogs        AuditLog[]
+  properties       Property[]
+  buildings        Building[]
+  units            Unit[]
+  staffAssignments StaffAssignment[]
 
+  /// Referenced by the composite foreign keys below. Every child row carries
+  /// organizationId as part of its foreign key, so a unit cannot point at a
+  /// property in another organization even if every guard in the API failed.
   @@index([status])
 }
 
@@ -121,12 +174,14 @@ model User {
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
 
-  organization           Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  organization           Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   roles                  UserRole[]
   sessions               Session[]
   passwordResetTokens    PasswordResetToken[]
   emailVerificationToken EmailVerificationToken[]
   auditLogs              AuditLog[]
+  staffAssignments       StaffAssignment[]        @relation("AssignedStaff")
+  assignmentsMade        StaffAssignment[]        @relation("AssignedBy")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -293,4 +348,129 @@ model AuditLog {
   @@index([organizationId, entityType, entityId])
   @@index([organizationId, userId])
   @@index([action])
+}
+
+// ── Portfolio (Phase 2) ──────────────────────────────────────────────────────
+
+/// A site: an estate, a block of flats, a row of shops, a commercial building.
+///
+/// Note the `@@unique([organizationId, id])`. It exists so children can carry a
+/// COMPOSITE foreign key that includes the tenant column — see Building and
+/// Unit below. That makes a cross-organization reference impossible in the
+/// database itself, not merely unlikely because the API checks for it.
+model Property {
+  id             String         @id @default(cuid())
+  organizationId String
+  name           String
+  propertyType   PropertyType   @default(RESIDENTIAL)
+  description    String?
+  addressLine    String?
+  city           String?
+  county         String?
+  country        String         @default("Kenya")
+  latitude       Decimal?       @db.Decimal(9, 6)
+  longitude      Decimal?       @db.Decimal(9, 6)
+  imageUrl       String?
+  status         PropertyStatus @default(ACTIVE)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  buildings        Building[]
+  units            Unit[]
+  staffAssignments StaffAssignment[]
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, propertyType])
+  @@index([organizationId, city])
+}
+
+/// A block within a property. "Block A", "Block B". Optional: a property with a
+/// single structure can hold its units directly.
+model Building {
+  id             String         @id @default(cuid())
+  organizationId String
+  propertyId     String
+  name           String
+  description    String?
+  floors         Int?
+  status         BuildingStatus @default(ACTIVE)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  /// Composite: the property must be in the SAME organization as this building.
+  property     Property     @relation(fields: [organizationId, propertyId], references: [organizationId, id], onDelete: Restrict)
+  units        Unit[]
+
+  @@unique([organizationId, id])
+  @@unique([propertyId, name])
+  @@index([organizationId])
+  @@index([organizationId, propertyId])
+  @@index([organizationId, status])
+}
+
+/// The rentable thing. Everything financial in later phases hangs off a unit.
+model Unit {
+  id             String     @id @default(cuid())
+  organizationId String
+  propertyId     String
+  /// Null when the property has no blocks and units attach to it directly.
+  buildingId     String?
+  unitNumber     String
+  unitType       UnitType   @default(ONE_BEDROOM)
+  floor          Int?
+  bedrooms       Int?
+  bathrooms      Int?
+  /// Decimal, never Float. No money in this system is ever a binary fraction.
+  monthlyRent    Decimal    @db.Decimal(14, 2)
+  securityDeposit Decimal   @default(0) @db.Decimal(14, 2)
+  status         UnitStatus @default(VACANT)
+  waterMeterNumber       String?
+  electricityMeterNumber String?
+  description    String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  property     Property     @relation(fields: [organizationId, propertyId], references: [organizationId, id], onDelete: Restrict)
+  /// Composite and optional. Restrict rather than SetNull: the foreign key
+  /// includes the required organizationId, so a cascade-to-null would try to
+  /// null the tenant column too and fail. Deleting a block instead detaches its
+  /// units to the property first, in one transaction — see BuildingsService.
+  building     Building?    @relation(fields: [organizationId, buildingId], references: [organizationId, id], onDelete: Restrict)
+
+  @@unique([organizationId, id])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, propertyId])
+  @@index([organizationId, buildingId])
+  @@index([organizationId, unitType])
+}
+
+/// Which properties a property-scoped staff member may see.
+///
+/// A CARETAKER or ACCOUNTANT with no rows here sees nothing — the scope fails
+/// closed. Owners and managers are unrestricted within their organization and
+/// have no rows at all.
+model StaffAssignment {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  propertyId     String
+  assignedById   String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("AssignedStaff", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy   User?        @relation("AssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+  property     Property     @relation(fields: [organizationId, propertyId], references: [organizationId, id], onDelete: Cascade)
+
+  @@unique([userId, propertyId])
+  @@index([organizationId])
+  @@index([userId])
+  @@index([organizationId, propertyId])
 }

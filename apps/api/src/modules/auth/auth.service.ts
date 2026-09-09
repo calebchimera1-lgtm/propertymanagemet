@@ -12,6 +12,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { AUDIT_ACTIONS, AuditLogService } from '@/modules/audit-logs/audit-log.service';
 import { PermissionsService } from '@/modules/permissions/permissions.service';
 import { EMAIL_PROVIDER, type EmailProvider } from '@/providers/email/email-provider.interface';
+import { PropertyScopeService } from '@/tenancy/property-scope.service';
 import type { AuthContext } from '@/tenancy/tenant-context';
 import { TenantContextService } from '@/tenancy/tenant-context.service';
 import type {
@@ -52,6 +53,7 @@ export class AuthService {
     private readonly permissions: PermissionsService,
     private readonly audit: AuditLogService,
     private readonly tenant: TenantContextService,
+    private readonly propertyScope: PropertyScopeService,
     private readonly config: AppConfig,
     @Inject(EMAIL_PROVIDER) private readonly email: EmailProvider,
   ) {}
@@ -566,6 +568,7 @@ export class AuthService {
     if (!user) throw new NotFoundError('User');
 
     const { roles, permissions } = await this.permissions.forUser(userId);
+    const scopedPropertyIds = await this.propertyScope.resolve(userId, roles);
 
     return {
       user: {
@@ -582,8 +585,7 @@ export class AuthService {
       organization: user.organization,
       roles,
       permissions,
-      // Unrestricted until StaffAssignment exists (Phase 2/5).
-      scopedPropertyIds: null,
+      scopedPropertyIds,
     };
   }
 

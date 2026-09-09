@@ -4,11 +4,13 @@ A multi-tenant property management platform for landlords, property owners, prop
 businesses running portfolios of properties, buildings, units, tenants, leases, rent, payments,
 expenses, maintenance, staff and documents.
 
-**Current state: Phase 1 (Foundation) complete.** You can register an organization, sign in over a
-secure cookie session, move around the authenticated app shell, manage your profile and devices,
-and sign out. The authorization, multi-tenancy and audit machinery every later phase depends on is
-in place and covered by tests. Properties, tenants, leases and money arrive in Phases 2–6 — see
-[`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) §21.
+**Current state: Phase 2 (Property Management) complete.** On top of the Phase 1 foundation
+(accounts, sessions, roles, permissions, audit trail) you can now build and browse a real
+portfolio — properties, buildings and units with rent — with server-side search, filtering,
+sorting and pagination, and with property-level scoping for caretakers and accountants.
+Tenants, leases and money arrive in Phases 3–6 — see [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) §21.
+
+Phase notes: [`docs/PHASE-1.md`](docs/PHASE-1.md) · [`docs/PHASE-2.md`](docs/PHASE-2.md)
 
 ---
 
@@ -258,14 +260,15 @@ the column.
 
 ## What is and is not built yet
 
-**Working now (Phase 1):** registration, sign-in/out, sessions and device revocation, password
+**Working now (Phases 1–2):** registration, sign-in/out, sessions and device revocation, password
 change and reset, email verification flow, organization and settings management, the user
-directory, the permission catalogue and role listing, the app shell, and the audit trail behind all
-of it.
+directory, roles and permissions, the app shell and the audit trail — plus properties, buildings
+and units with full CRUD, archive-vs-delete rules, unit status handling, server-side search,
+filtering, sorting and pagination, and property scoping for caretakers and accountants.
 
-**Deliberately not built yet:** properties, buildings, units, tenants, leases, rent, payments,
-receipts, expenses, maintenance, staff assignment, documents, notifications, dashboard metrics and
-reports. They are specified in the blueprint and scheduled in Phases 2–6.
+**Deliberately not built yet:** tenants, leases, rent, payments, receipts, expenses, maintenance,
+staff management, documents, notifications, dashboard metrics and reports. They are specified in
+the blueprint and scheduled in Phases 3–6.
 
 **Honest gaps in what is built:**
 
@@ -273,9 +276,10 @@ reports. They are specified in the blueprint and scheduled in Phases 2–6.
   reset) are fully implemented; the Version 1 adapter writes the link to the server log instead of
   sending it. Nothing in the UI claims an email was sent. Supplying SMTP credentials and switching
   `EMAIL_DRIVER` makes it live without changing any domain code.
-- **Property scoping is not active yet.** `PROPERTY_SCOPED_ROLES` and the `scopedPropertyIds`
-  contract exist, but `StaffAssignment` needs the `Property` table, so every authenticated user is
-  currently unrestricted *within their own organization*. Cross-organization isolation is fully
-  enforced and tested.
+- **Staff assignments have no UI yet.** Property scoping is fully enforced and tested, but the
+  screens for creating staff and granting them properties are the Phase 5 StaffModule. Today
+  assignments come from the seed or the database directly.
+- **Every seeded unit is vacant.** Occupancy only becomes meaningful with leases in Phase 3;
+  seeding `OCCUPIED` units with no tenant behind them would be inventing data.
 - **Password strength** is a policy check plus a small common-password blocklist, not full
   dictionary scoring. Deferred to Phase 7.

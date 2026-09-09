@@ -30,6 +30,10 @@ describe('Permissions (e2e)', () => {
     { method: 'GET' as const, path: '/users', permission: 'staff.view' },
     { method: 'GET' as const, path: '/roles', permission: 'staff.view' },
     { method: 'GET' as const, path: '/permissions', permission: 'staff.view' },
+    { method: 'GET' as const, path: '/properties', permission: 'properties.view' },
+    { method: 'GET' as const, path: '/buildings', permission: 'buildings.view' },
+    { method: 'GET' as const, path: '/units', permission: 'units.view' },
+    { method: 'GET' as const, path: '/units/vacant', permission: 'units.view' },
   ];
 
   async function createUserWithRole(role: RoleName): Promise<SignedIn> {
@@ -117,6 +121,83 @@ describe('Permissions (e2e)', () => {
       where: { id: owner.organizationId },
     });
     expect(organization.city).toBeNull();
+  });
+
+  describe('portfolio writes', () => {
+    it('lets a manager create a property but not delete one', async () => {
+      const manager = await createUserWithRole('PROPERTY_MANAGER');
+
+      const created = await authed(app, manager)
+        .post('/properties')
+        .send({ name: 'Manager Estate', propertyType: 'APARTMENT' })
+        .expect(201);
+
+      // properties.delete is owner-only in the matrix — the manager archives.
+      await authed(app, manager).delete(`/properties/${created.body.id}`).expect(403);
+      await authed(app, manager).post(`/properties/${created.body.id}/archive`).expect(201);
+    });
+
+    it('refuses a caretaker every portfolio write except a unit status', async () => {
+      const property = await authed(app, owner)
+        .post('/properties')
+        .send({ name: 'Owner Estate', propertyType: 'APARTMENT' })
+        .expect(201);
+      const unit = await authed(app, owner)
+        .post('/units')
+        .send({
+          propertyId: property.body.id,
+          unitNumber: 'A1',
+          unitType: 'ONE_BEDROOM',
+          monthlyRent: '10000',
+        })
+        .expect(201);
+
+      const caretaker = await createUserWithRole('CARETAKER');
+      await prisma.staffAssignment.create({
+        data: {
+          organizationId: owner.organizationId,
+          userId: caretaker.userId,
+          propertyId: property.body.id,
+        },
+      });
+      const scoped = await signIn(app, 'caretaker@abc.test', STRONG_PASSWORD);
+
+      await authed(app, scoped)
+        .post('/properties')
+        .send({ name: 'Caretaker Estate', propertyType: 'APARTMENT' })
+        .expect(403);
+      await authed(app, scoped)
+        .post('/units')
+        .send({
+          propertyId: property.body.id,
+          unitNumber: 'A2',
+          unitType: 'ONE_BEDROOM',
+          monthlyRent: '1000',
+        })
+        .expect(403);
+      await authed(app, scoped).delete(`/units/${unit.body.id}`).expect(403);
+
+      // units.update is granted, so the on-site status change is allowed.
+      await authed(app, scoped)
+        .patch(`/units/${unit.body.id}/status`)
+        .send({ status: 'MAINTENANCE' })
+        .expect(200);
+    });
+
+    it('gives an accountant read access to the portfolio but no write access', async () => {
+      const accountant = await createUserWithRole('ACCOUNTANT');
+
+      await authed(app, accountant).get('/properties').expect(200);
+      await authed(app, accountant).get('/units').expect(200);
+      await authed(app, accountant)
+        .post('/properties')
+        .send({ name: 'Accountant Estate', propertyType: 'APARTMENT' })
+        .expect(403);
+      await authed(app, accountant)
+        .post('/buildings')
+        .send({ propertyId: 'anything', name: 'Block' })
+        .expect(403);
+    });
   });
 
   it('never reports permissions the user does not hold', async () => {

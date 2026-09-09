@@ -15,6 +15,10 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'UserRole',
   'Settings',
   'AuditLog',
+  'Property',
+  'Building',
+  'Unit',
+  'StaffAssignment',
 ]);
 
 const WHERE_OPERATIONS = new Set([

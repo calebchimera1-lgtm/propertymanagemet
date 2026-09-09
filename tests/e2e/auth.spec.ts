@@ -112,9 +112,11 @@ test.describe('Authentication', () => {
     await expect(page).toHaveURL(/\/dashboard/);
 
     // One real user, one real session — and an explicit statement that the
-    // portfolio sections are not built yet, rather than empty metric cards.
+    // not-yet-built sections are not built yet, rather than empty metric cards.
+    // The roadmap panel shrinks as phases ship: Phase 2 has landed, so the
+    // next unbuilt section named here is Phase 3.
     await expect(page.getByText('People in your organization')).toBeVisible();
-    await expect(page.getByText('Phase 2')).toBeVisible();
+    await expect(page.getByText('Phase 3')).toBeVisible();
   });
 });
 

@@ -9,10 +9,13 @@ import { ConfigModule } from '@/config/config.module';
 import { JobsModule } from '@/jobs/jobs.module';
 import { AuditLogsModule } from '@/modules/audit-logs/audit-logs.module';
 import { AuthModule } from '@/modules/auth/auth.module';
+import { BuildingsModule } from '@/modules/buildings/buildings.module';
 import { HealthModule } from '@/modules/health/health.module';
 import { OrganizationsModule } from '@/modules/organizations/organizations.module';
 import { PermissionsModule } from '@/modules/permissions/permissions.module';
+import { PropertiesModule } from '@/modules/properties/properties.module';
 import { RolesModule } from '@/modules/roles/roles.module';
+import { UnitsModule } from '@/modules/units/units.module';
 import { UsersModule } from '@/modules/users/users.module';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { ProvidersModule } from '@/providers/providers.module';
@@ -46,6 +49,9 @@ import { TenancyModule } from '@/tenancy/tenancy.module';
     OrganizationsModule,
     UsersModule,
     RolesModule,
+    PropertiesModule,
+    BuildingsModule,
+    UnitsModule,
     HealthModule,
     JobsModule,
   ],

@@ -34,4 +34,21 @@ export const queryKeys = {
   settings: ['settings'] as const,
   users: (params: Record<string, unknown> = {}) => ['users', params] as const,
   roles: ['roles'] as const,
+
+  properties: (params: Record<string, unknown> = {}) => ['properties', params] as const,
+  property: (id: string) => ['properties', 'detail', id] as const,
+  propertySummary: (id: string) => ['properties', 'summary', id] as const,
+  buildings: (params: Record<string, unknown> = {}) => ['buildings', params] as const,
+  building: (id: string) => ['buildings', 'detail', id] as const,
+  units: (params: Record<string, unknown> = {}) => ['units', params] as const,
+  unit: (id: string) => ['units', 'detail', id] as const,
+  vacantUnits: (propertyId?: string) => ['units', 'vacant', propertyId ?? 'all'] as const,
 };
+
+/**
+ * Portfolio mutations touch counts on other screens: creating a unit changes
+ * its property's unit count and its building's. Invalidating the three roots
+ * together keeps every visible number honest without hand-listing keys at each
+ * call site.
+ */
+export const PORTFOLIO_ROOTS = [['properties'], ['buildings'], ['units']] as const;

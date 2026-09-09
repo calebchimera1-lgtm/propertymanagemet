@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { PrismaClient } from '@pm/database';
 import { seedPermissionsAndRoles } from './permissions';
 import { seedDemoData } from './demo';
+import { seedPortfolio } from './portfolio';
 
 /**
  * Two-part seed (blueprint §7).
@@ -27,6 +28,9 @@ async function main(): Promise<void> {
       }
       console.log('\nSeeding demo organizations...');
       await seedDemoData(prisma);
+
+      console.log('\nSeeding demo portfolio...');
+      await seedPortfolio(prisma);
     } else {
       console.log('\nSkipping demo data. Pass --demo to include it.');
     }

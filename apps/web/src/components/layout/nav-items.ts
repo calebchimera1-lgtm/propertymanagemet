@@ -1,6 +1,8 @@
 import {
+  Blocks,
   Building2,
   ClipboardList,
+  DoorClosed,
   FileText,
   Home,
   Receipt,
@@ -38,6 +40,14 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [{ label: 'Dashboard', href: '/dashboard', icon: Home }],
   },
   {
+    label: 'Portfolio',
+    items: [
+      { label: 'Properties', href: '/properties', icon: Building2, permission: 'properties.view' },
+      { label: 'Buildings', href: '/buildings', icon: Blocks, permission: 'buildings.view' },
+      { label: 'Units', href: '/units', icon: DoorClosed, permission: 'units.view' },
+    ],
+  },
+  {
     label: 'Organization',
     items: [
       { label: 'Users', href: '/users', icon: Users, permission: 'staff.view' },
@@ -48,7 +58,6 @@ export const NAV_GROUPS: NavGroup[] = [
 
 /** Referenced by the dashboard's roadmap panel so the two never drift apart. */
 export const UPCOMING_SECTIONS = [
-  { label: 'Properties, buildings and units', icon: Building2, phase: 'Phase 2' },
   { label: 'Tenants and leases', icon: ClipboardList, phase: 'Phase 3' },
   { label: 'Rent, payments and receipts', icon: Wallet, phase: 'Phase 4' },
   { label: 'Expenses and maintenance', icon: Receipt, phase: 'Phase 4-5' },

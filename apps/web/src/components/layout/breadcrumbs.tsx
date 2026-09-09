@@ -9,10 +9,20 @@ const LABELS: Record<string, string> = {
   users: 'Users',
   settings: 'Settings',
   profile: 'Profile',
+  properties: 'Properties',
+  buildings: 'Buildings',
+  units: 'Units',
 };
 
+/** A cuid segment is a record id, not a page name — show it as one. */
+function isRecordId(segment: string): boolean {
+  return /^c[a-z0-9]{20,}$/i.test(segment);
+}
+
 function labelFor(segment: string): string {
-  return LABELS[segment] ?? segment.charAt(0).toUpperCase() + segment.slice(1);
+  if (LABELS[segment]) return LABELS[segment];
+  if (isRecordId(segment)) return 'Details';
+  return segment.charAt(0).toUpperCase() + segment.slice(1);
 }
 
 export function Breadcrumbs() {
