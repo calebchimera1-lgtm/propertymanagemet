@@ -1,0 +1,14 @@
+{
+  "extends": "@pm/config/tsconfig.node.json",
+  "compilerOptions": {
+    "types": ["node", "jest"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "baseUrl": "./",
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "test"]
+}

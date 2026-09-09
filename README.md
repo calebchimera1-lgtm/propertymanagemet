@@ -4,27 +4,278 @@ A multi-tenant property management platform for landlords, property owners, prop
 businesses running portfolios of properties, buildings, units, tenants, leases, rent, payments,
 expenses, maintenance, staff and documents.
 
-> **Current status: blueprint under review.** No application code has been written yet.
-> Read [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) — the complete technical design for Version 1.
+**Current state: Phase 1 (Foundation) complete.** You can register an organization, sign in over a
+secure cookie session, move around the authenticated app shell, manage your profile and devices,
+and sign out. The authorization, multi-tenancy and audit machinery every later phase depends on is
+in place and covered by tests. Properties, tenants, leases and money arrive in Phases 2–6 — see
+[`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) §21.
 
-## Planned stack (locked)
+---
 
-| Layer | Technology |
+## Contents
+
+- [Architecture](#architecture)
+- [Technologies](#technologies)
+- [Project structure](#project-structure)
+- [Requirements](#requirements)
+- [Getting started with Docker](#getting-started-with-docker)
+- [Getting started without Docker](#getting-started-without-docker)
+- [Environment variables](#environment-variables)
+- [Database, migrations and seed](#database-migrations-and-seed)
+- [Running the apps](#running-the-apps)
+- [Testing](#testing)
+- [API documentation](#api-documentation)
+- [Security](#security)
+- [Deployment](#deployment)
+- [Development workflow](#development-workflow)
+- [What is and is not built yet](#what-is-and-is-not-built-yet)
+
+---
+
+## Architecture
+
+```
+Browser
+  │  HTTPS, HTTP-only cookie session + X-CSRF-Token
+  ▼
+Next.js (App Router)          no database access, no authoritative business logic
+  │  REST /api/v1
+  ▼
+NestJS modular monolith       rate limit → authenticate → CSRF → tenant context → authorize
+  │  Prisma (tenant-scoped client)
+  ▼
+PostgreSQL 16                 Decimal money, composite FKs carrying organizationId
+```
+
+Full design, including the ERD, RBAC matrix, financial flows and phase plan:
+[`docs/BLUEPRINT.md`](docs/BLUEPRINT.md).
+
+## Technologies
+
+| Layer | Choice |
 |---|---|
-| Frontend | Next.js · React · TypeScript · Tailwind CSS · shadcn/ui · Recharts · React Hook Form · Zod · TanStack Query |
-| Backend | Node.js · NestJS · TypeScript · REST · Swagger/OpenAPI |
-| Database | PostgreSQL |
-| ORM | Prisma |
-| Auth | HTTP-only cookie sessions (Postgres-backed) · Argon2id |
-| Authorization | RBAC + per-organization isolation + property scoping |
-| Testing | Jest · Supertest · Vitest · Playwright |
-| Tooling | pnpm workspaces · Docker Compose |
-| Architecture | Modular monolith |
+| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS, Radix primitives, TanStack Query, React Hook Form, Zod, Recharts |
+| Backend | Node.js 20+, NestJS 11, TypeScript, REST, Swagger/OpenAPI |
+| Database | PostgreSQL 16 |
+| ORM | Prisma 6 |
+| Auth | Postgres-backed cookie sessions, Argon2id |
+| Authorization | RBAC (47 permissions × 6 roles) + per-organization isolation |
+| Testing | Jest, Supertest, Vitest, Playwright |
+| Tooling | pnpm workspaces, Docker Compose |
 
-## Documentation
+## Project structure
 
-- [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) — architecture, data model, RBAC matrix, security model,
-  financial flows, API map, phases, and the V1 scope verification.
+```
+apps/api               NestJS API (modules, guards, tenancy, providers)
+apps/web               Next.js app (App Router, feature slices, shared UI)
+packages/config        shared tsconfig bases
+packages/database      the generated Prisma client, wrapped as a workspace package
+packages/types         permissions, roles, API contracts shared by both apps
+packages/validation    Zod schemas and the password policy, shared by both apps
+packages/ui            design tokens and the Tailwind preset
+prisma/                schema.prisma (source of truth), migrations, seed
+tests/e2e              Playwright specs
+docs/                  BLUEPRINT.md and supporting documents
+deploy/                Caddyfile for the production proxy
+```
 
-Installation, environment, migration, seed, test and deployment instructions are written as
-Phase 1 lands.
+## Requirements
+
+- **Node.js 20+** and **pnpm 9+** (`corepack enable`)
+- **PostgreSQL 16**, or **Docker** + **Docker Compose**
+
+## Getting started with Docker
+
+```bash
+cp .env.example .env
+# Set SESSION_SECRET to a real value:
+#   openssl rand -base64 48
+# In .env set DATABASE_URL host to "postgres" for the Docker network:
+#   postgresql://pm:pm_password@postgres:5432/property_management?schema=public
+
+docker compose up -d          # postgres, api, web
+docker compose exec api pnpm db:seed:demo
+```
+
+- Web: <http://localhost:3000>
+- API: <http://localhost:3001/api/v1>
+- Swagger: <http://localhost:3001/api/docs>
+
+## Getting started without Docker
+
+```bash
+corepack enable
+pnpm install
+
+cp .env.example .env
+# 1. Put a real SESSION_SECRET in .env      (openssl rand -base64 48)
+# 2. Point DATABASE_URL and TEST_DATABASE_URL at your PostgreSQL
+
+createdb property_management
+createdb pm_test
+
+pnpm db:generate      # generate the Prisma client
+pnpm db:migrate       # apply migrations
+pnpm db:seed:demo     # permissions, system roles, and two demo organizations
+
+pnpm dev              # builds shared packages, then runs api + web together
+```
+
+Demo sign-in (development and test databases only):
+
+| Email | Role |
+|---|---|
+| `owner@abc.test` | Property Owner |
+| `manager@abc.test` | Property Manager |
+| `accountant@abc.test` | Accountant |
+| `caretaker@abc.test` | Caretaker |
+| `owner@xyz.test` | Property Owner of a **second** organization |
+
+Password for all of them: `DemoPassword123`
+
+The second organization exists so you can confirm for yourself that ABC never sees XYZ's data.
+
+## Environment variables
+
+All variables are documented with defaults in [`.env.example`](.env.example). The API validates the
+entire environment with a Zod schema **at boot and refuses to start** if anything is missing or
+malformed — a missing `SESSION_SECRET` stops the process rather than silently becoming `''`.
+
+The ones you must set:
+
+| Variable | Notes |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `TEST_DATABASE_URL` | A **throwaway** database — the integration suite deletes rows in it |
+| `SESSION_SECRET` | ≥ 32 characters. Rotating it invalidates every session, by design |
+| `CORS_ORIGIN` | Comma-separated allow-list. Never `*` — credentials are sent on every request |
+| `COOKIE_SECURE` | Must be `true` in production; boot fails otherwise |
+
+Anything prefixed `NEXT_PUBLIC_` is compiled into the browser bundle and must never hold a secret.
+
+## Database, migrations and seed
+
+```bash
+pnpm db:generate        # regenerate the Prisma client after a schema change
+pnpm db:migrate         # create + apply a migration (development)
+pnpm db:migrate:deploy   # apply existing migrations (test, staging, production)
+pnpm db:reset           # drop, re-migrate and re-seed (development only)
+pnpm db:seed            # permissions + system roles — safe in every environment
+pnpm db:seed:demo       # the above plus two demo organizations (never in production)
+pnpm db:studio          # browse the data
+```
+
+`prisma/schema.prisma` is the source of truth. Migrations are committed and never hand-edited,
+except for the deliberate hand-written SQL migrations that add objects Prisma cannot express:
+partial unique indexes and `CHECK` constraints (see
+`prisma/migrations/*_invariant_constraints/migration.sql`).
+
+Both seeds are idempotent: running them twice changes nothing the second time.
+
+## Running the apps
+
+```bash
+pnpm dev            # api (3001) + web (3000)
+pnpm dev:api
+pnpm dev:web
+pnpm build          # generate client, build packages, build both apps
+pnpm start          # run the production builds
+```
+
+## Testing
+
+```bash
+pnpm test              # unit tests, both apps
+pnpm test:api          # Jest unit tests (API)
+pnpm test:e2e:api      # Supertest integration tests against a real PostgreSQL
+pnpm test:web          # Vitest (web)
+pnpm test:e2e          # Playwright, desktop + mobile viewports
+```
+
+The integration suite prepares its own database (migrate + seed) on every run, so a schema change
+can never leave it testing yesterday's tables. It runs against a **real** PostgreSQL rather than a
+mocked Prisma client, because the unique indexes and check constraints are precisely what needs
+proving.
+
+Playwright needs both servers already running (`pnpm dev`), and the API started with raised auth
+rate limits — the suite registers more organizations in a minute than the production limit allows:
+
+```bash
+AUTH_REGISTER_LIMIT=500 AUTH_LOGIN_LIMIT=500 AUTH_SENSITIVE_LIMIT=500 pnpm dev:api
+pnpm test:e2e
+```
+
+## API documentation
+
+Swagger UI is served at `/api/docs` when `SWAGGER_ENABLED=true` (default in development, off in
+production). Every endpoint documents its request, response, required permission and error cases.
+
+## Security
+
+Implemented in Phase 1 and covered by tests:
+
+- **Argon2id** password hashing; a dummy verification runs on the unknown-email path so response
+  timing cannot be used to discover which addresses are registered
+- **Opaque session tokens** — the database stores only a SHA-256 hash, so a dump cannot be replayed
+- **HTTP-only, SameSite=Lax cookies**, `Secure` in production; nothing in `localStorage`
+- **Signed double-submit CSRF** bound to the session, constant-time compared
+- **Deny-by-default authorization** — a route that declares no policy is refused, not opened
+- **Four-layer tenant isolation** — session-derived `organizationId`, a tenant-scoping Prisma
+  extension that throws rather than running unscoped, service-level checks, and `404` (never `403`)
+  for another organization's records
+- **`whitelist` + `forbidNonWhitelisted` validation** — a request that tries to send
+  `organizationId` is rejected outright
+- **Rate limiting** on registration, sign-in and password reset; account lockout after 10 failures
+- **Uniform error envelope** with a request id; no stack traces or driver errors leave the server
+- **Append-only audit log** that redacts anything credential-shaped and never breaks a request
+
+The full checklist, including what is deferred to the Phase 7 hardening pass, is in
+[`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) §23.
+
+## Deployment
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm migrate   # must exit 0 first
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Both images are multi-stage and run as a non-root user with a healthcheck. Migrations run as a
+separate one-shot service, never inside the application process, so a bad migration cannot be
+retried forever by a restarting container. Caddy terminates TLS and is the only service published
+to the host. Rolling back is redeploying the previous image tag, which is why migrations are
+written forward-compatible: additive first, destructive only one release after the code stops using
+the column.
+
+## Development workflow
+
+1. Change `prisma/schema.prisma` → `pnpm db:migrate` → `pnpm db:generate`.
+2. Add a permission to `packages/types/src/permissions.ts` and the matrix reconciles on next seed.
+3. Build the module: `controller` (thin) → `service` (rules) → repository (Prisma).
+4. Declare access on every route: `@Public`, `@AuthenticatedOnly` or `@RequirePermissions`.
+   Forgetting is a 403, not an open door.
+5. Add the endpoint to the isolation and permission suites before calling it done.
+6. `pnpm typecheck && pnpm lint && pnpm test && pnpm test:e2e:api`.
+
+## What is and is not built yet
+
+**Working now (Phase 1):** registration, sign-in/out, sessions and device revocation, password
+change and reset, email verification flow, organization and settings management, the user
+directory, the permission catalogue and role listing, the app shell, and the audit trail behind all
+of it.
+
+**Deliberately not built yet:** properties, buildings, units, tenants, leases, rent, payments,
+receipts, expenses, maintenance, staff assignment, documents, notifications, dashboard metrics and
+reports. They are specified in the blueprint and scheduled in Phases 2–6.
+
+**Honest gaps in what is built:**
+
+- **Email is not delivered.** The `EmailProvider` port and both flows (verification and password
+  reset) are fully implemented; the Version 1 adapter writes the link to the server log instead of
+  sending it. Nothing in the UI claims an email was sent. Supplying SMTP credentials and switching
+  `EMAIL_DRIVER` makes it live without changing any domain code.
+- **Property scoping is not active yet.** `PROPERTY_SCOPED_ROLES` and the `scopedPropertyIds`
+  contract exist, but `StaffAssignment` needs the `Property` table, so every authenticated user is
+  currently unrestricted *within their own organization*. Cross-organization isolation is fully
+  enforced and tested.
+- **Password strength** is a policy check plus a small common-password blocklist, not full
+  dictionary scoring. Deferred to Phase 7.

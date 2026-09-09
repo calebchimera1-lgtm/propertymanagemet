@@ -1,0 +1,98 @@
+# Production stack. Migrations run as a one-shot service that must exit 0
+# before the API starts — never automatically inside the application process,
+# so a bad migration cannot be retried forever by a restarting container.
+#
+#   docker compose -f docker-compose.prod.yml run --rm migrate
+#   docker compose -f docker-compose.prod.yml up -d
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Not published to the host: only the private network reaches it.
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: production
+    restart: 'no'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+    entrypoint: ['sh', '-c']
+    command: ['npx prisma migrate deploy --schema prisma/schema.prisma && node -e "0"']
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: production
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      API_PORT: 3001
+      API_URL: ${API_URL}
+      APP_URL: ${APP_URL}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      SESSION_SECRET: ${SESSION_SECRET}
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN}
+      COOKIE_SECURE: 'true'
+      SWAGGER_ENABLED: 'false'
+      LOG_LEVEL: info
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      STORAGE_LOCAL_PATH: /app/storage/uploads
+    volumes:
+      - storage_uploads:/app/storage
+    expose:
+      - '3001'
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: production
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    restart: always
+    depends_on:
+      - api
+    expose:
+      - '3000'
+
+  proxy:
+    image: caddy:2-alpine
+    restart: always
+    depends_on:
+      - api
+      - web
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  storage_uploads:
+  caddy_data:
+  caddy_config:

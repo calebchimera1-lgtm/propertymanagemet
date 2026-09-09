@@ -1,0 +1,42 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# build output
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# generated
+packages/database/generated/
+prisma/generated/
+
+# runtime storage (uploaded files never belong in git)
+storage/
+!storage/.gitkeep
+
+# test output
+coverage/
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# editor / os
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

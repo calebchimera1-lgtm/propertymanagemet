@@ -1,0 +1,296 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Property Management SaaS — database schema (source of truth)
+//
+// Phase 1 covers identity and tenancy only: organizations, users, sessions,
+// roles, permissions, tokens, settings and the audit trail that the auth flows
+// already write to. Portfolio, occupancy, money and operations models arrive in
+// Phases 2–5 exactly as designed in docs/BLUEPRINT.md.
+//
+// Conventions (blueprint §7):
+//   • ids are cuid strings — opaque, non-enumerable, safe in URLs
+//   • money is Decimal(14,2), never Float (no money in this phase yet)
+//   • every tenant-owned model carries organizationId and indexes it
+//   • timestamps are UTC
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../packages/database/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ────────────────────────────────────────────────────────────────────
+
+enum OrganizationStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  INVITED
+  SUSPENDED
+}
+
+enum RoleName {
+  SUPER_ADMIN
+  PROPERTY_OWNER
+  PROPERTY_MANAGER
+  ACCOUNTANT
+  CARETAKER
+  TENANT
+}
+
+// ── Tenancy ──────────────────────────────────────────────────────────────────
+
+/// The tenant boundary. Every organization-owned row hangs off this table and
+/// no query may ever cross it. See blueprint §9 for the four enforcement layers.
+model Organization {
+  id          String             @id @default(cuid())
+  name        String
+  /// Short uppercase code, unique platform-wide. Used in receipt numbers.
+  code        String             @unique
+  email       String?
+  phone       String?
+  addressLine String?
+  city        String?
+  county      String?
+  country     String             @default("Kenya")
+  currency    String             @default("KES")
+  timezone    String             @default("Africa/Nairobi")
+  logoUrl     String?
+  status      OrganizationStatus @default(ACTIVE)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  users     User[]
+  roles     Role[]
+  userRoles UserRole[]
+  sessions  Session[]
+  settings  Settings?
+  auditLogs AuditLog[]
+
+  @@index([status])
+}
+
+/// Per-organization preferences. Created atomically with the organization so
+/// no code path has to cope with a missing settings row.
+model Settings {
+  id                     String   @id @default(cuid())
+  organizationId         String   @unique
+  /// Default day of month rent falls due for new leases. Capped at 28 so a
+  /// lease can never generate an impossible date in February.
+  defaultDueDay          Int      @default(5)
+  receiptPrefix          String   @default("RCP")
+  leaseExpiryWarningDays Int      @default(60)
+  rentGenerationEnabled  Boolean  @default(true)
+  /// Late fees are not implemented in V1; the flag exists so the setting can be
+  /// switched on when the feature lands, not so the UI can pretend it works.
+  lateFeeEnabled         Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+// ── Identity ─────────────────────────────────────────────────────────────────
+
+model User {
+  id               String     @id @default(cuid())
+  organizationId   String
+  /// Globally unique in V1: one account per email address, platform-wide, so
+  /// signing in with an email alone is unambiguous. Membership of more than one
+  /// organization would need a membership table and is out of V1 scope.
+  email            String     @unique
+  /// Argon2id hash. Excluded from every serializer; never logged, never returned.
+  passwordHash     String
+  fullName         String
+  phone            String?
+  avatarUrl        String?
+  status           UserStatus @default(ACTIVE)
+  emailVerifiedAt  DateTime?
+  lastLoginAt      DateTime?
+  failedLoginCount Int        @default(0)
+  lockedUntil      DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  organization           Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  roles                  UserRole[]
+  sessions               Session[]
+  passwordResetTokens    PasswordResetToken[]
+  emailVerificationToken EmailVerificationToken[]
+  auditLogs              AuditLog[]
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([email])
+}
+
+/// A logged-in browser. The cookie carries an opaque random token; only its
+/// SHA-256 hash is stored here, so a database dump cannot be replayed as a login.
+model Session {
+  id             String    @id @default(cuid())
+  userId         String
+  organizationId String
+  /// sha256(token). Unique so a token collision is impossible.
+  tokenHash      String    @unique
+  /// Per-session secret the double-submit CSRF token is derived from.
+  csrfSecret     String
+  ipAddress      String?
+  userAgent      String?
+  expiresAt      DateTime
+  /// Ceiling for sliding expiry: the session dies here no matter how active it is.
+  absoluteExpiresAt DateTime
+  lastSeenAt     DateTime  @default(now())
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([organizationId])
+}
+
+// ── Authorization ────────────────────────────────────────────────────────────
+
+/// System roles are seeded once with organizationId = NULL and shared by every
+/// organization. The nullable column is kept so per-organization custom roles
+/// can be added later without a breaking migration. Uniqueness is enforced by
+/// two partial indexes (see the initial migration) because Postgres treats
+/// NULLs as distinct in a plain composite unique index.
+model Role {
+  id             String   @id @default(cuid())
+  organizationId String?
+  name           RoleName
+  label          String
+  description    String
+  isSystem       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization?    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permissions  RolePermission[]
+  users        UserRole[]
+
+  @@index([organizationId])
+  @@index([name])
+}
+
+/// The permission catalogue. Rows mirror PERMISSIONS in @pm/types exactly; the
+/// seed reconciles this table on every run.
+model Permission {
+  id          String   @id @default(cuid())
+  /// e.g. "payments.create"
+  key         String   @unique
+  resource    String
+  action      String
+  description String
+  createdAt   DateTime @default(now())
+
+  roles RolePermission[]
+
+  @@index([resource])
+}
+
+model RolePermission {
+  id           String   @id @default(cuid())
+  roleId       String
+  permissionId String
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+}
+
+model UserRole {
+  id             String   @id @default(cuid())
+  userId         String
+  roleId         String
+  organizationId String
+  assignedById   String?
+  createdAt      DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([organizationId])
+  @@index([userId])
+}
+
+// ── Single-use tokens ────────────────────────────────────────────────────────
+
+/// Only the hash is stored, exactly as with sessions. A stolen database row
+/// cannot be turned back into a working reset link.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  ipAddress String?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ── Audit ────────────────────────────────────────────────────────────────────
+
+/// Append-only. The authentication flows already write here in Phase 1; the
+/// authorized read endpoint and UI land in Phase 5.
+///
+/// `actorEmail` is a snapshot so the trail stays readable after a user row is
+/// removed, which is also why `userId` is nullable with onDelete: SetNull.
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String?
+  actorEmail     String
+  action         String
+  entityType     String
+  entityId       String?
+  metadata       Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, entityType, entityId])
+  @@index([organizationId, userId])
+  @@index([action])
+}

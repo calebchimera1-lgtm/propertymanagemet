@@ -1,0 +1,11 @@
+{
+  "name": "@pm/database",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "files": ["index.js", "index.d.ts", "generated"],
+  "dependencies": {
+    "@prisma/client": "^6.2.1"
+  }
+}

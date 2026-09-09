@@ -1,0 +1,21 @@
+# TLS is obtained and renewed automatically. The API is not published to the
+# host at all: it is only reachable through this proxy on the private network.
+{$DOMAIN:localhost} {
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy api:3001
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}

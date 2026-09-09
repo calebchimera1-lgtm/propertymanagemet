@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Incremental builds must stay off here: nest build deletes dist on every
+    // run, and a surviving .tsbuildinfo would convince tsc that files it just
+    // deleted are still emitted — producing a dist with .d.ts files and no .js.
+    "incremental": false
+  },
+  "exclude": ["node_modules", "dist", "test", "**/*.spec.ts"]
+}

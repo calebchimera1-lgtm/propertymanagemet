@@ -1,0 +1,97 @@
+# Development stack. Three services, nothing else.
+#   docker compose up -d
+#   docker compose --profile test up -d postgres_test   # integration-test database
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pm_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pm
+      POSTGRES_PASSWORD: pm_password
+      POSTGRES_DB: property_management
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pm -d property_management']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres_test:
+    image: postgres:16-alpine
+    container_name: pm_postgres_test
+    profiles: ['test']
+    environment:
+      POSTGRES_USER: pm
+      POSTGRES_PASSWORD: pm_password
+      POSTGRES_DB: pm_test
+    ports:
+      - '5433:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pm -d pm_test']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: development
+    container_name: pm_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://pm:pm_password@postgres:5432/property_management?schema=public
+      API_PORT: 3001
+      API_URL: http://localhost:3001
+      APP_URL: http://localhost:3000
+      CORS_ORIGIN: http://localhost:3000
+      SESSION_SECRET: ${SESSION_SECRET:-development-only-secret-change-me-32-chars-min}
+      COOKIE_SECURE: 'false'
+      SWAGGER_ENABLED: 'true'
+      STORAGE_LOCAL_PATH: /app/storage/uploads
+    ports:
+      - '3001:3001'
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./packages:/app/packages
+      - ./prisma:/app/prisma
+      - storage_uploads:/app/storage
+      - /app/node_modules
+      - /app/apps/api/node_modules
+    command: sh -c "pnpm db:migrate:deploy && pnpm --filter @pm/api dev"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: development
+    container_name: pm_web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./apps/web:/app/apps/web
+      - ./packages:/app/packages
+      - /app/node_modules
+      - /app/apps/web/node_modules
+      - /app/apps/web/.next
+    command: pnpm --filter @pm/web dev
+
+volumes:
+  pgdata:
+  storage_uploads:
