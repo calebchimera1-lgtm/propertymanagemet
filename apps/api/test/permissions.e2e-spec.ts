@@ -34,6 +34,9 @@ describe('Permissions (e2e)', () => {
     { method: 'GET' as const, path: '/buildings', permission: 'buildings.view' },
     { method: 'GET' as const, path: '/units', permission: 'units.view' },
     { method: 'GET' as const, path: '/units/vacant', permission: 'units.view' },
+    { method: 'GET' as const, path: '/tenants', permission: 'tenants.view' },
+    { method: 'GET' as const, path: '/leases', permission: 'leases.view' },
+    { method: 'GET' as const, path: '/leases/expiring', permission: 'leases.view' },
   ];
 
   async function createUserWithRole(role: RoleName): Promise<SignedIn> {
@@ -182,6 +185,81 @@ describe('Permissions (e2e)', () => {
         .patch(`/units/${unit.body.id}/status`)
         .send({ status: 'MAINTENANCE' })
         .expect(200);
+    });
+
+    it('lets a manager run the lease lifecycle but keeps deletion from them', async () => {
+      const manager = await createUserWithRole('PROPERTY_MANAGER');
+
+      const property = await authed(app, manager)
+        .post('/properties')
+        .send({ name: 'Manager Estate', propertyType: 'APARTMENT' })
+        .expect(201);
+      const unit = await authed(app, manager)
+        .post('/units')
+        .send({
+          propertyId: property.body.id,
+          unitNumber: 'M1',
+          unitType: 'ONE_BEDROOM',
+          monthlyRent: '30000',
+        })
+        .expect(201);
+      const tenant = await authed(app, manager)
+        .post('/tenants')
+        .send({ fullName: 'Managed Tenant', phone: '+254700123456' })
+        .expect(201);
+
+      const lease = await authed(app, manager)
+        .post('/leases')
+        .send({ tenantId: tenant.body.id, unitId: unit.body.id, startDate: '2026-01-01', dueDay: 5 })
+        .expect(201);
+
+      await authed(app, manager)
+        .post(`/leases/${lease.body.id}/terminate`)
+        .send({ reason: 'Done' })
+        .expect(201);
+
+      // tenants.delete is owner-only in the matrix.
+      await authed(app, manager).delete(`/tenants/${tenant.body.id}`).expect(403);
+    });
+
+    it('refuses a caretaker and an accountant every occupancy write', async () => {
+      const property = await authed(app, owner)
+        .post('/properties')
+        .send({ name: 'Owner Estate', propertyType: 'APARTMENT' })
+        .expect(201);
+      const unit = await authed(app, owner)
+        .post('/units')
+        .send({
+          propertyId: property.body.id,
+          unitNumber: 'A1',
+          unitType: 'ONE_BEDROOM',
+          monthlyRent: '10000',
+        })
+        .expect(201);
+
+      for (const role of ['CARETAKER', 'ACCOUNTANT'] as const) {
+        const staff = await createUserWithRole(role);
+        await prisma.staffAssignment.create({
+          data: {
+            organizationId: owner.organizationId,
+            userId: staff.userId,
+            propertyId: property.body.id,
+          },
+        });
+        const scoped = await signIn(app, `${role.toLowerCase()}@abc.test`, STRONG_PASSWORD);
+
+        // Both roles may see tenants and leases; neither may create them.
+        await authed(app, scoped).get('/tenants').expect(200);
+        await authed(app, scoped).get('/leases').expect(200);
+        await authed(app, scoped)
+          .post('/tenants')
+          .send({ fullName: 'Sneaky Tenant', phone: '+254700999000' })
+          .expect(403);
+        await authed(app, scoped)
+          .post('/leases')
+          .send({ tenantId: 'anything', unitId: unit.body.id, startDate: '2026-01-01', dueDay: 5 })
+          .expect(403);
+      }
     });
 
     it('gives an accountant read access to the portfolio but no write access', async () => {

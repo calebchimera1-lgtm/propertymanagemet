@@ -11,10 +11,12 @@ import { AuditLogsModule } from '@/modules/audit-logs/audit-logs.module';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { BuildingsModule } from '@/modules/buildings/buildings.module';
 import { HealthModule } from '@/modules/health/health.module';
+import { LeasesModule } from '@/modules/leases/leases.module';
 import { OrganizationsModule } from '@/modules/organizations/organizations.module';
 import { PermissionsModule } from '@/modules/permissions/permissions.module';
 import { PropertiesModule } from '@/modules/properties/properties.module';
 import { RolesModule } from '@/modules/roles/roles.module';
+import { TenantsModule } from '@/modules/tenants/tenants.module';
 import { UnitsModule } from '@/modules/units/units.module';
 import { UsersModule } from '@/modules/users/users.module';
 import { PrismaModule } from '@/prisma/prisma.module';
@@ -52,6 +54,8 @@ import { TenancyModule } from '@/tenancy/tenancy.module';
     PropertiesModule,
     BuildingsModule,
     UnitsModule,
+    TenantsModule,
+    LeasesModule,
     HealthModule,
     JobsModule,
   ],

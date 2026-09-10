@@ -4,13 +4,15 @@ A multi-tenant property management platform for landlords, property owners, prop
 businesses running portfolios of properties, buildings, units, tenants, leases, rent, payments,
 expenses, maintenance, staff and documents.
 
-**Current state: Phase 2 (Property Management) complete.** On top of the Phase 1 foundation
-(accounts, sessions, roles, permissions, audit trail) you can now build and browse a real
-portfolio — properties, buildings and units with rent — with server-side search, filtering,
-sorting and pagination, and with property-level scoping for caretakers and accountants.
-Tenants, leases and money arrive in Phases 3–6 — see [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) §21.
+**Current state: Phase 3 (Tenants & Leases) complete.** On top of the Phase 1 foundation
+(accounts, sessions, roles, permissions, audit trail) and the Phase 2 portfolio (properties,
+buildings, units, property scoping), you can now record tenants, move them into vacant units on a
+lease, renew and end those leases, and track expiry — with the unit's status following the lease
+in the same transaction, and one active lease per unit enforced by the database.
+Rent, payments and reports arrive in Phases 4–6 — see [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) §21.
 
-Phase notes: [`docs/PHASE-1.md`](docs/PHASE-1.md) · [`docs/PHASE-2.md`](docs/PHASE-2.md)
+Phase notes: [`docs/PHASE-1.md`](docs/PHASE-1.md) · [`docs/PHASE-2.md`](docs/PHASE-2.md) ·
+[`docs/PHASE-3.md`](docs/PHASE-3.md)
 
 ---
 
@@ -260,15 +262,16 @@ the column.
 
 ## What is and is not built yet
 
-**Working now (Phases 1–2):** registration, sign-in/out, sessions and device revocation, password
+**Working now (Phases 1–3):** registration, sign-in/out, sessions and device revocation, password
 change and reset, email verification flow, organization and settings management, the user
-directory, roles and permissions, the app shell and the audit trail — plus properties, buildings
-and units with full CRUD, archive-vs-delete rules, unit status handling, server-side search,
-filtering, sorting and pagination, and property scoping for caretakers and accountants.
+directory, roles and permissions, the app shell and the audit trail; properties, buildings and
+units with full CRUD, archive-vs-delete rules, unit status handling, server-side search,
+filtering, sorting and pagination, and property scoping; tenants with a 360 profile, and the full
+lease lifecycle — create, renew, terminate — with expiry tracking and one active lease per unit.
 
-**Deliberately not built yet:** tenants, leases, rent, payments, receipts, expenses, maintenance,
-staff management, documents, notifications, dashboard metrics and reports. They are specified in
-the blueprint and scheduled in Phases 3–6.
+**Deliberately not built yet:** rent, payments, receipts, expenses, maintenance, staff management,
+documents, notifications, dashboard metrics and reports. They are specified in the blueprint and
+scheduled in Phases 4–6.
 
 **Honest gaps in what is built:**
 
@@ -279,7 +282,9 @@ the blueprint and scheduled in Phases 3–6.
 - **Staff assignments have no UI yet.** Property scoping is fully enforced and tested, but the
   screens for creating staff and granting them properties are the Phase 5 StaffModule. Today
   assignments come from the seed or the database directly.
-- **Every seeded unit is vacant.** Occupancy only becomes meaningful with leases in Phase 3;
-  seeding `OCCUPIED` units with no tenant behind them would be inventing data.
+- **No money yet.** The tenant profile and lease detail name rent and payments as arriving in
+  Phase 4 rather than showing a zero balance, which would read as "nothing owed".
+- **Deposits are recorded, not ledgered.** `depositPaid` is tracked and capped at the security
+  deposit; deductions and move-out refunds are out of V1 scope.
 - **Password strength** is a policy check plus a small common-password blocklist, not full
   dictionary scoring. Deferred to Phase 7.

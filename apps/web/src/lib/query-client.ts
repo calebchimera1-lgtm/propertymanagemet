@@ -43,6 +43,13 @@ export const queryKeys = {
   units: (params: Record<string, unknown> = {}) => ['units', params] as const,
   unit: (id: string) => ['units', 'detail', id] as const,
   vacantUnits: (propertyId?: string) => ['units', 'vacant', propertyId ?? 'all'] as const,
+
+  tenants: (params: Record<string, unknown> = {}) => ['tenants', params] as const,
+  tenant: (id: string) => ['tenants', 'detail', id] as const,
+  tenantProfile: (id: string) => ['tenants', 'profile', id] as const,
+  leases: (params: Record<string, unknown> = {}) => ['leases', params] as const,
+  lease: (id: string) => ['leases', 'detail', id] as const,
+  expiringLeases: (days: number) => ['leases', 'expiring', days] as const,
 };
 
 /**
@@ -52,3 +59,16 @@ export const queryKeys = {
  * call site.
  */
 export const PORTFOLIO_ROOTS = [['properties'], ['buildings'], ['units']] as const;
+
+/**
+ * Occupancy writes ripple further than the portfolio ones: creating a lease
+ * changes a unit's status and a property's occupancy rate, so the portfolio
+ * roots are invalidated alongside the occupancy ones.
+ */
+export const OCCUPANCY_ROOTS = [
+  ['tenants'],
+  ['leases'],
+  ['units'],
+  ['properties'],
+  ['buildings'],
+] as const;

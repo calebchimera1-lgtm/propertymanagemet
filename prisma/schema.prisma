@@ -5,8 +5,8 @@
 // permissions, tokens, settings and the audit trail.
 // Phase 2 adds the portfolio: properties, buildings, units and the staff
 // assignments that scope a caretaker or accountant to particular properties.
-// Occupancy, money and operations arrive in Phases 3–5 as designed in
-// docs/BLUEPRINT.md.
+// Phase 3 adds occupancy: tenants and the leases that put them in units.
+// Money and operations arrive in Phases 4–5 as designed in docs/BLUEPRINT.md.
 //
 // Conventions (blueprint §7):
 //   • ids are cuid strings — opaque, non-enumerable, safe in URLs
@@ -76,6 +76,27 @@ enum UnitType {
   OTHER
 }
 
+enum IdType {
+  NATIONAL_ID
+  PASSPORT
+  ALIEN_ID
+  MILITARY_ID
+  OTHER
+}
+
+enum LeaseStatus {
+  ACTIVE
+  /// Derived, not hand-set: a scheduled job moves an ACTIVE lease here when its
+  /// end date falls inside the organization's warning window.
+  EXPIRING_SOON
+  /// Derived: the end date has passed. The unit is NOT freed automatically —
+  /// a tenant staying past the end date is normal, and pretending the unit is
+  /// vacant would contradict what is actually happening on the ground.
+  EXPIRED
+  /// Explicit: someone ended the lease. This frees the unit.
+  TERMINATED
+}
+
 enum UnitStatus {
   VACANT
   OCCUPIED
@@ -125,6 +146,8 @@ model Organization {
   buildings        Building[]
   units            Unit[]
   staffAssignments StaffAssignment[]
+  tenants          Tenant[]
+  leases           Lease[]
 
   /// Referenced by the composite foreign keys below. Every child row carries
   /// organizationId as part of its foreign key, so a unit cannot point at a
@@ -379,6 +402,7 @@ model Property {
   buildings        Building[]
   units            Unit[]
   staffAssignments StaffAssignment[]
+  leases           Lease[]
 
   @@unique([organizationId, id])
   @@unique([organizationId, name])
@@ -405,6 +429,7 @@ model Building {
   /// Composite: the property must be in the SAME organization as this building.
   property     Property     @relation(fields: [organizationId, propertyId], references: [organizationId, id], onDelete: Restrict)
   units        Unit[]
+  leases       Lease[]
 
   @@unique([organizationId, id])
   @@unique([propertyId, name])
@@ -442,6 +467,7 @@ model Unit {
   /// null the tenant column too and fail. Deleting a block instead detaches its
   /// units to the property first, in one transaction — see BuildingsService.
   building     Building?    @relation(fields: [organizationId, buildingId], references: [organizationId, id], onDelete: Restrict)
+  leases       Lease[]
 
   @@unique([organizationId, id])
   @@index([organizationId])
@@ -472,5 +498,91 @@ model StaffAssignment {
   @@unique([userId, propertyId])
   @@index([organizationId])
   @@index([userId])
+  @@index([organizationId, propertyId])
+}
+
+// ── Occupancy (Phase 3) ──────────────────────────────────────────────────────
+
+/// A person who rents, or has rented, a unit.
+///
+/// A tenant is not a User: they have no login in Version 1. The TENANT role
+/// exists in the permission matrix for the Version 2 portal, at which point a
+/// User row would be linked to this one.
+model Tenant {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  fullName              String
+  phone                 String
+  email                 String?
+  idType                IdType?
+  /// National ID or passport number. Unique per organization when present —
+  /// see the partial index in the migration, since NULLs must stay distinct.
+  nationalId            String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  occupation            String?
+  address               String?
+  photoUrl              String?
+  notes                 String?
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  leases       Lease[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId])
+  @@index([organizationId, isActive])
+  @@index([organizationId, fullName])
+  @@index([organizationId, phone])
+}
+
+/// The agreement that puts a tenant in a unit.
+///
+/// `monthlyRent` and `securityDeposit` are COPIED from the unit at creation
+/// rather than read through it. Raising a unit's rent must not silently rewrite
+/// what a sitting tenant agreed to pay, and from Phase 4 every rent record is
+/// generated from the lease's figure, not the unit's.
+model Lease {
+  id             String      @id @default(cuid())
+  organizationId String
+  tenantId       String
+  propertyId     String
+  buildingId     String?
+  unitId         String
+  startDate      DateTime    @db.Date
+  /// Null for an open-ended lease. Nothing expires without one.
+  endDate        DateTime?   @db.Date
+  monthlyRent    Decimal     @db.Decimal(14, 2)
+  securityDeposit Decimal    @default(0) @db.Decimal(14, 2)
+  /// How much of the deposit has actually been received. Version 1 records the
+  /// amount; a full refundable-deposit ledger (deductions, refunds on move-out)
+  /// is deliberately out of scope.
+  depositPaid    Decimal     @default(0) @db.Decimal(14, 2)
+  /// Day of month rent falls due. Capped at 28 so every month has that date.
+  dueDay         Int
+  status         LeaseStatus @default(ACTIVE)
+  terminatedAt   DateTime?
+  terminationReason String?
+  notes          String?
+  createdById    String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  /// Composite foreign keys throughout: a lease cannot reference a tenant,
+  /// property, building or unit belonging to another organization.
+  tenant       Tenant       @relation(fields: [organizationId, tenantId], references: [organizationId, id], onDelete: Restrict)
+  property     Property     @relation(fields: [organizationId, propertyId], references: [organizationId, id], onDelete: Restrict)
+  building     Building?    @relation(fields: [organizationId, buildingId], references: [organizationId, id], onDelete: Restrict)
+  unit         Unit         @relation(fields: [organizationId, unitId], references: [organizationId, id], onDelete: Restrict)
+
+  @@unique([organizationId, id])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, status, endDate])
+  @@index([organizationId, tenantId])
+  @@index([organizationId, unitId])
   @@index([organizationId, propertyId])
 }

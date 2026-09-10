@@ -67,3 +67,46 @@ export async function createUnit(
     buildingId: string | null;
   };
 }
+
+export async function createTenant(
+  app: NestExpressApplication,
+  session: SignedIn,
+  overrides: Record<string, unknown> = {},
+) {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const response = await authed(app, session)
+    .post('/tenants')
+    .send({
+      fullName: `Tenant ${suffix}`,
+      phone: `+2547${Math.floor(10000000 + Math.random() * 89999999)}`,
+      ...overrides,
+    })
+    .expect(201);
+
+  return response.body as { id: string; fullName: string; isActive: boolean };
+}
+
+export async function createLease(
+  app: NestExpressApplication,
+  session: SignedIn,
+  input: { tenantId: string; unitId: string } & Record<string, unknown>,
+) {
+  const response = await authed(app, session)
+    .post('/leases')
+    .send({
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+      dueDay: 5,
+      ...input,
+    })
+    .expect(201);
+
+  return response.body as {
+    id: string;
+    status: string;
+    monthlyRent: string;
+    securityDeposit: string;
+    depositPaid: string;
+    daysUntilExpiry: number | null;
+  };
+}

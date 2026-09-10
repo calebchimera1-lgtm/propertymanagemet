@@ -77,6 +77,8 @@ async function bootstrap(): Promise<void> {
         .addTag('Properties')
         .addTag('Buildings')
         .addTag('Units')
+        .addTag('Tenants')
+        .addTag('Leases')
         .addTag('Organization')
         .addTag('Users')
         .addTag('Roles')

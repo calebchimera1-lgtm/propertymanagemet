@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@/modules/auth/auth.module';
+import { LeasesModule } from '@/modules/leases/leases.module';
+import { LeaseStatusJob } from './lease-status.job';
 import { SessionCleanupJob } from './session-cleanup.job';
 
 @Module({
-  imports: [AuthModule],
-  providers: [SessionCleanupJob],
+  imports: [AuthModule, LeasesModule],
+  providers: [SessionCleanupJob, LeaseStatusJob],
 })
 export class JobsModule {}

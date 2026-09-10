@@ -1,12 +1,12 @@
 import {
   Blocks,
   Building2,
-  ClipboardList,
   DoorClosed,
   FileText,
   Home,
   Receipt,
   Settings,
+  UserSquare2,
   Users,
   Wallet,
 } from 'lucide-react';
@@ -48,6 +48,13 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: 'Occupancy',
+    items: [
+      { label: 'Tenants', href: '/tenants', icon: UserSquare2, permission: 'tenants.view' },
+      { label: 'Leases', href: '/leases', icon: FileText, permission: 'leases.view' },
+    ],
+  },
+  {
     label: 'Organization',
     items: [
       { label: 'Users', href: '/users', icon: Users, permission: 'staff.view' },
@@ -58,7 +65,6 @@ export const NAV_GROUPS: NavGroup[] = [
 
 /** Referenced by the dashboard's roadmap panel so the two never drift apart. */
 export const UPCOMING_SECTIONS = [
-  { label: 'Tenants and leases', icon: ClipboardList, phase: 'Phase 3' },
   { label: 'Rent, payments and receipts', icon: Wallet, phase: 'Phase 4' },
   { label: 'Expenses and maintenance', icon: Receipt, phase: 'Phase 4-5' },
   { label: 'Dashboard metrics and reports', icon: FileText, phase: 'Phase 6' },

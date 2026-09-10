@@ -53,7 +53,7 @@ test.describe('Portfolio', () => {
 
     // ── Property ──────────────────────────────────────────────────────────
     await page.goto('/properties');
-    await expect(page.getByRole('heading', { name: 'Properties' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Properties', exact: true })).toBeVisible();
     await expect(page.getByText('No properties yet')).toBeVisible();
 
     await page.getByRole('button', { name: 'Add property' }).first().click();

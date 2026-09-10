@@ -12,6 +12,8 @@ const LABELS: Record<string, string> = {
   properties: 'Properties',
   buildings: 'Buildings',
   units: 'Units',
+  tenants: 'Tenants',
+  leases: 'Leases',
 };
 
 /** A cuid segment is a record id, not a page name — show it as one. */
