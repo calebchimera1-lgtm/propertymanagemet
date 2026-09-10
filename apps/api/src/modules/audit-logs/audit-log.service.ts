@@ -26,8 +26,9 @@ export interface AuditEntry {
  *      denylist so a careless caller cannot put a password or token in the
  *      trail.
  *
- * The authorized read endpoint and its UI arrive in Phase 5; the auth flows
- * already write here.
+ * Written to by every module; read back through GET /audit-logs, which is the
+ * only HTTP surface it has. There is deliberately no create, update or delete
+ * endpoint — an audit trail an operator can edit is not an audit trail.
  */
 @Injectable()
 export class AuditLogService {
@@ -137,4 +138,22 @@ export const AUDIT_ACTIONS = {
   EXPENSE_CREATED: 'EXPENSE_CREATED',
   EXPENSE_UPDATED: 'EXPENSE_UPDATED',
   EXPENSE_DELETED: 'EXPENSE_DELETED',
+
+  MAINTENANCE_CREATED: 'MAINTENANCE_CREATED',
+  MAINTENANCE_UPDATED: 'MAINTENANCE_UPDATED',
+  MAINTENANCE_ASSIGNED: 'MAINTENANCE_ASSIGNED',
+  MAINTENANCE_STATUS_CHANGED: 'MAINTENANCE_STATUS_CHANGED',
+
+  STAFF_INVITED: 'STAFF_INVITED',
+  STAFF_UPDATED: 'STAFF_UPDATED',
+  STAFF_ROLE_CHANGED: 'STAFF_ROLE_CHANGED',
+  STAFF_PROPERTIES_ASSIGNED: 'STAFF_PROPERTIES_ASSIGNED',
+  STAFF_ACTIVATED: 'STAFF_ACTIVATED',
+  STAFF_DEACTIVATED: 'STAFF_DEACTIVATED',
+  STAFF_DELETED: 'STAFF_DELETED',
+
+  DOCUMENT_UPLOADED: 'DOCUMENT_UPLOADED',
+  DOCUMENT_DOWNLOADED: 'DOCUMENT_DOWNLOADED',
+  DOCUMENT_DELETED: 'DOCUMENT_DELETED',
+  DOCUMENT_UPLOAD_REJECTED: 'DOCUMENT_UPLOAD_REJECTED',
 } as const;

@@ -6,6 +6,7 @@ import { serialiseMoney, toDecimal } from '@/common/money/money';
 import { AUDIT_ACTIONS, AuditLogService } from '@/modules/audit-logs/audit-log.service';
 import { parseDateOnly, todayUtc } from '@/modules/leases/lease-dates';
 import { FinanceCalculationService } from '@/modules/rent/finance-calculation.service';
+import { NotificationsService } from '@/modules/notifications/notifications.service';
 import { ReceiptNumberService } from '@/modules/receipts/receipt-number.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { InjectScopedPrisma } from '@/prisma/prisma.module';
@@ -51,6 +52,7 @@ export class PaymentsService {
     private readonly audit: AuditLogService,
     private readonly finance: FinanceCalculationService,
     private readonly receiptNumbers: ReceiptNumberService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private serialise(payment: PaymentRow) {
@@ -352,6 +354,21 @@ export class PaymentsService {
           rentRecordId: rentRecord.id,
           newBalance: serialiseMoney(updatedRecord.balance),
         },
+      });
+
+      /*
+       * Told after the transaction commits, never inside it.
+       *
+       * A notification is a side effect of a payment, not part of it: an alert
+       * that could not be written must not roll back money that was.
+       */
+      await this.notifications.paymentRecorded({
+        organizationId: auth.organizationId,
+        propertyId: payment.propertyId,
+        paymentId: payment.id,
+        tenantName: payment.tenant.fullName,
+        amount: serialiseMoney(amount),
+        excludeUserId: auth.userId,
       });
 
       return {

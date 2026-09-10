@@ -20,11 +20,13 @@ function useOccupancyInvalidation() {
   };
 }
 
-export function useTenants(query: Query) {
+/** @param enabled Skip the request until a tenant list is actually needed. */
+export function useTenants(query: Query, enabled = true) {
   return useQuery({
     queryKey: queryKeys.tenants(query),
     queryFn: () => occupancyApi.tenants.list(query),
     placeholderData: keepPreviousData,
+    enabled,
   });
 }
 

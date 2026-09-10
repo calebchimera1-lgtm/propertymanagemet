@@ -11,6 +11,7 @@ import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { useSession } from '@/features/auth/use-session';
+import { AuditLogPanel } from '@/features/operations/components/audit-log-panel';
 import { ApiError, api } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-client';
 
@@ -267,6 +268,13 @@ export default function SettingsPage() {
           </form>
         </CardContent>
       </Card>
+
+      {can('auditlogs.view') ? (
+        <>
+          <Separator />
+          <AuditLogPanel />
+        </>
+      ) : null}
     </>
   );
 }

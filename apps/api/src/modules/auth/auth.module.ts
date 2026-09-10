@@ -11,6 +11,6 @@ import { TokenService } from './token.service';
   providers: [AuthService, SessionService, PasswordService, TokenService, CookieService],
   // SessionService is exported because the global auth and CSRF guards depend
   // on it; the rest stays internal to the module.
-  exports: [SessionService, PasswordService],
+  exports: [SessionService, PasswordService, TokenService],
 })
 export class AuthModule {}

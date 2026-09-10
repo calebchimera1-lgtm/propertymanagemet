@@ -6,6 +6,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AppConfig } from './config/app.config';
+import { LocalFileStorageProvider } from './providers/storage/local.file-storage';
 import { TenantContextMiddleware } from './tenancy/tenant-context.middleware';
 
 async function bootstrap(): Promise<void> {
@@ -83,6 +84,11 @@ async function bootstrap(): Promise<void> {
         .addTag('Payments')
         .addTag('Receipts')
         .addTag('Expenses')
+        .addTag('Maintenance')
+        .addTag('Staff')
+        .addTag('Documents')
+        .addTag('Notifications')
+        .addTag('Audit logs')
         .addTag('Organization')
         .addTag('Users')
         .addTag('Roles')
@@ -95,6 +101,10 @@ async function bootstrap(): Promise<void> {
     });
     logger.log(`Swagger UI available at ${config.apiUrl}/api/docs`);
   }
+
+  // Fail at boot if the storage path is unusable, rather than on the first
+  // upload an hour into a working day.
+  await app.get(LocalFileStorageProvider).ensureRoot();
 
   await app.listen(config.port, '0.0.0.0');
   logger.log(`API listening on ${config.apiUrl}/api/v1 (${config.nodeEnv})`);

@@ -79,6 +79,11 @@ export function authed(app: NestExpressApplication, session: SignedIn) {
         .delete(`${BASE}${path}`)
         .set('Cookie', session.cookies)
         .set('X-CSRF-Token', session.csrfToken),
+    put: (path: string) =>
+      request(app.getHttpServer())
+        .put(`${BASE}${path}`)
+        .set('Cookie', session.cookies)
+        .set('X-CSRF-Token', session.csrfToken),
     /** Same as post()/patch(), but deliberately without the CSRF header. */
     postWithoutCsrf: (path: string) =>
       request(app.getHttpServer()).post(`${BASE}${path}`).set('Cookie', session.cookies),

@@ -4,19 +4,21 @@ A multi-tenant property management platform for landlords, property owners, prop
 businesses running portfolios of properties, buildings, units, tenants, leases, rent, payments,
 expenses, maintenance, staff and documents.
 
-**Current state: Phase 4 (Rent, Payments, Receipts & Expenses) complete.** On top of the Phase 1
-foundation (accounts, sessions, roles, permissions, audit trail), the Phase 2 portfolio
-(properties, buildings, units, property scoping) and the Phase 3 occupancy layer (tenants, leases,
-expiry tracking), the product now handles money: generate a month's rent from active leases,
-record payments against those charges in a single locked transaction, issue gapless numbered
-receipts you can print, void a payment without losing the record, and track what each property
-costs to run. Every amount is `Decimal` from the database to the browser — no financial value is
-ever a JavaScript number.
-Maintenance, documents, staff management and reports arrive in Phases 5–6 — see
+**Current state: Phase 5 (Operations) complete.** On top of the Phase 1 foundation (accounts,
+sessions, roles, permissions, audit trail), the Phase 2 portfolio (properties, buildings, units,
+property scoping), the Phase 3 occupancy layer (tenants, leases, expiry tracking) and the Phase 4
+money layer (rent generation, transactional payments, gapless receipts, expenses), the product now
+runs day to day: raise maintenance jobs and drive them through a validated workflow with a
+timeline behind every change; invite staff and choose which properties each of them may see;
+upload documents that are checked by their real contents and can only be fetched through an
+authorized download; receive in-app alerts; and read an audit trail nothing in the product can
+edit.
+Dashboard metrics and the nine reports arrive in Phase 6 — see
 [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) §21.
 
 Phase notes: [`docs/PHASE-1.md`](docs/PHASE-1.md) · [`docs/PHASE-2.md`](docs/PHASE-2.md) ·
-[`docs/PHASE-3.md`](docs/PHASE-3.md) · [`docs/PHASE-4.md`](docs/PHASE-4.md)
+[`docs/PHASE-3.md`](docs/PHASE-3.md) · [`docs/PHASE-4.md`](docs/PHASE-4.md) ·
+[`docs/PHASE-5.md`](docs/PHASE-5.md)
 
 ---
 
@@ -242,6 +244,17 @@ Implemented and covered by tests:
   both settle the same balance, and any failure rolls the whole thing back
 - **Financial records are never cascade-deleted** — every money relation is `onDelete: Restrict`,
   and a unit or property carrying charges refuses deletion with a message naming the counts
+- **Uploads fail closed** — size, extension, declared MIME and the file's real first bytes must all
+  agree; the stored path is generated server-side so traversal is impossible rather than defended
+  against; a rejected upload is written to the audit trail
+- **Documents are never reachable by URL** — no static mount, no storage key in any response, and
+  every download runs session → permission → organization → property scope before it streams, as
+  an `attachment` with `nosniff` and a CSP sandbox
+- **Staff management cannot escalate** — `SUPER_ADMIN` is not assignable, nobody may change their
+  own role or deactivate themselves, the last active owner is protected, and deactivation revokes
+  every open session in the same request
+- **The audit trail is read-only over HTTP** — there is no create, update or delete route, and the
+  read omits the stored IP address and user agent
 
 The full checklist, including what is deferred to the Phase 7 hardening pass, is in
 [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) §23; what each phase delivered is in
@@ -273,18 +286,21 @@ the column.
 
 ## What is and is not built yet
 
-**Working now (Phases 1–4):** registration, sign-in/out, sessions and device revocation, password
-change and reset, email verification flow, organization and settings management, the user
-directory, roles and permissions, the app shell and the audit trail; properties, buildings and
-units with full CRUD, archive-vs-delete rules, unit status handling, server-side search,
-filtering, sorting and pagination, and property scoping; tenants with a 360 profile, and the full
-lease lifecycle — create, renew, terminate — with expiry tracking and one active lease per unit;
-monthly rent generation, payments recorded in a single locked transaction, gapless numbered
-receipts with a print view, payment voiding that reverses without deleting, and expense tracking
-by category.
+**Working now (Phases 1–5):** registration, sign-in/out, sessions and device revocation, password
+change and reset, email verification flow, organization and settings management, roles and
+permissions, the app shell and the audit trail; properties, buildings and units with full CRUD,
+archive-vs-delete rules, unit status handling, server-side search, filtering, sorting and
+pagination, and property scoping; tenants with a 360 profile, and the full lease lifecycle —
+create, renew, terminate — with expiry tracking and one active lease per unit; monthly rent
+generation, payments recorded in a single locked transaction, gapless numbered receipts with a
+print view, payment voiding that reverses without deleting, and expense tracking by category;
+maintenance requests with a validated workflow and a full timeline, staff invitation with
+per-property assignments, document upload and authorized download, in-app notifications with
+daily sweeps, and an authorized read of the audit trail.
 
-**Deliberately not built yet:** maintenance requests, staff management, documents, notifications,
-dashboard metrics and reports. They are specified in the blueprint and scheduled in Phases 5–6.
+**Deliberately not built yet:** dashboard metrics and charts, and the nine reports with CSV and
+PDF export. They are specified in the blueprint and scheduled in Phase 6, with a security and
+accessibility hardening pass in Phase 7.
 
 **Honest gaps in what is built:**
 
@@ -292,9 +308,16 @@ dashboard metrics and reports. They are specified in the blueprint and scheduled
   reset) are fully implemented; the Version 1 adapter writes the link to the server log instead of
   sending it. Nothing in the UI claims an email was sent. Supplying SMTP credentials and switching
   `EMAIL_DRIVER` makes it live without changing any domain code.
-- **Staff assignments have no UI yet.** Property scoping is fully enforced and tested, but the
-  screens for creating staff and granting them properties are the Phase 5 StaffModule. Today
-  assignments come from the seed or the database directly.
+- **Staff invites are handed over by hand.** Because email is not delivered, inviting someone
+  returns a one-time set-password link shown to the inviter once and never again, for them to pass
+  on. The screen says exactly that rather than implying a message was sent.
+- **Uploads are validated, not scanned.** Files are checked by size, extension, declared type and
+  their real first bytes, and are only ever served as `attachment` with `nosniff` and a CSP
+  sandbox — but there is no antivirus step. A ClamAV stage would slot into the same chain.
+- **Files are stored on a local volume.** The `FileStorageProvider` port has one adapter in V1;
+  an S3/R2 adapter is an environment variable and a DI binding away.
+- **A crash between writing an object and its row can orphan the object.** The ordering makes an
+  orphan harmless rather than a broken download, but no sweep job reclaims them yet.
 - **No M-Pesa integration.** M-Pesa payment references are typed by hand, and the payment dialog
   says so. Nothing is fetched from Safaricom, and no reconciliation is automatic.
 - **No credit balances.** A payment larger than the outstanding balance is refused with a 422

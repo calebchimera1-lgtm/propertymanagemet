@@ -73,7 +73,13 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   }
 
   const requestHeaders = new Headers(headers);
-  if (body !== undefined) requestHeaders.set('Content-Type', 'application/json');
+  /*
+   * FormData sets its own Content-Type, including the multipart boundary.
+   * Setting it by hand produces a boundary-less header the server cannot parse,
+   * which shows up as an empty file rather than an obvious error.
+   */
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+  if (body !== undefined && !isFormData) requestHeaders.set('Content-Type', 'application/json');
   if (UNSAFE_METHODS.has(method)) requestHeaders.set('X-CSRF-Token', readCsrfCookie());
 
   const response = await fetch(url.toString(), {
@@ -82,7 +88,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
     headers: requestHeaders,
     // Without this the session cookie is never sent and every call is anonymous.
     credentials: 'include',
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? undefined : isFormData ? (body as FormData) : JSON.stringify(body),
   });
 
   if (response.status === 204) return undefined as T;
@@ -104,12 +110,47 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   return payload as T;
 }
 
+/**
+ * Fetches a file the same way as any other call — session cookie included — and
+ * hands back a Blob.
+ *
+ * A document is never reachable by URL, so a plain `<a href>` would download it
+ * anonymously and get a 401. The browser gets the bytes through here instead,
+ * and the object URL is revoked as soon as the save dialog has them.
+ */
+export async function apiDownload(path: string): Promise<{ blob: Blob; filename: string | null }> {
+  const response = await fetch(`${API_URL}${path}`, { credentials: 'include' });
+
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: Partial<ApiErrorResponse> = {};
+    try {
+      payload = text ? (JSON.parse(text) as Partial<ApiErrorResponse>) : {};
+    } catch {
+      /* a failed download may not be JSON */
+    }
+    throw new ApiError(
+      response.status,
+      payload.code ?? 'UNKNOWN_ERROR',
+      payload.message ?? 'That file could not be downloaded.',
+      payload.details ?? [],
+      payload.requestId,
+    );
+  }
+
+  const disposition = response.headers.get('content-disposition') ?? '';
+  const match = /filename="([^"]+)"/.exec(disposition);
+  return { blob: await response.blob(), filename: match?.[1] ?? null };
+}
+
 export const api = {
   get: <T>(path: string, options?: RequestOptions) => apiFetch<T>(path, { ...options, method: 'GET' }),
   post: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     apiFetch<T>(path, { ...options, method: 'POST', body }),
   patch: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     apiFetch<T>(path, { ...options, method: 'PATCH', body }),
+  put: <T>(path: string, body?: unknown, options?: RequestOptions) =>
+    apiFetch<T>(path, { ...options, method: 'PUT', body }),
   delete: <T>(path: string, options?: RequestOptions) =>
     apiFetch<T>(path, { ...options, method: 'DELETE' }),
 };

@@ -10,7 +10,11 @@ import { JobsModule } from '@/jobs/jobs.module';
 import { AuditLogsModule } from '@/modules/audit-logs/audit-logs.module';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { BuildingsModule } from '@/modules/buildings/buildings.module';
+import { DocumentsModule } from '@/modules/documents/documents.module';
 import { ExpensesModule } from '@/modules/expenses/expenses.module';
+import { MaintenanceModule } from '@/modules/maintenance/maintenance.module';
+import { NotificationsModule } from '@/modules/notifications/notifications.module';
+import { StaffModule } from '@/modules/staff/staff.module';
 import { HealthModule } from '@/modules/health/health.module';
 import { LeasesModule } from '@/modules/leases/leases.module';
 import { OrganizationsModule } from '@/modules/organizations/organizations.module';
@@ -42,6 +46,7 @@ import { TenancyModule } from '@/tenancy/tenancy.module';
     PrismaModule,
     ProvidersModule,
     AuditLogsModule,
+    NotificationsModule,
     PermissionsModule,
     ScheduleModule.forRoot(),
     ThrottlerModule.forRootAsync({
@@ -64,6 +69,9 @@ import { TenancyModule } from '@/tenancy/tenancy.module';
     PaymentsModule,
     ReceiptsModule,
     ExpensesModule,
+    MaintenanceModule,
+    StaffModule,
+    DocumentsModule,
     HealthModule,
     JobsModule,
   ],

@@ -88,8 +88,10 @@ test.describe('Authentication', () => {
     await page.getByRole('button', { name: 'Sign in' }).click();
     await expect(page).toHaveURL(/\/dashboard/);
 
-    await page.goto('/users');
-    await expect(page.getByRole('heading', { name: 'Users' })).toBeVisible();
+    // The read-only user directory became the Staff screen in Phase 5, which
+    // does everything it did and more.
+    await page.goto('/staff');
+    await expect(page.getByRole('heading', { name: 'Staff' })).toBeVisible();
     // The desktop table and the mobile card list both contain the name; only
     // one of them is visible at a given viewport.
     await expect(page.getByText('Journey Owner').filter({ visible: true }).first()).toBeVisible();
@@ -113,10 +115,10 @@ test.describe('Authentication', () => {
 
     // One real user, one real session — and an explicit statement that the
     // not-yet-built sections are not built yet, rather than empty metric cards.
-    // The roadmap panel shrinks as phases ship: Phases 2, 3 and 4 have landed,
-    // so the next unbuilt section named here is Phase 5.
+    // The roadmap panel shrinks as phases ship: Phases 2 through 5 have
+    // landed, so the next unbuilt section named here is Phase 6.
     await expect(page.getByText('People in your organization')).toBeVisible();
-    await expect(page.getByText('Phase 5').first()).toBeVisible();
+    await expect(page.getByText('Phase 6').first()).toBeVisible();
   });
 });
 

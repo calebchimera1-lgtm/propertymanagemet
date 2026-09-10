@@ -14,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSession } from '@/features/auth/use-session';
+import { EntityDocuments } from '@/features/operations/components/entity-documents';
 import { LeaseFormDialog } from '@/features/occupancy/components/lease-form-dialog';
 import { TenantFormDialog } from '@/features/occupancy/components/tenant-form-dialog';
 import {
@@ -117,6 +118,7 @@ export default function TenantProfilePage() {
           <TabsTrigger value="lease">Current lease</TabsTrigger>
           <TabsTrigger value="rent">Rent &amp; payments</TabsTrigger>
           <TabsTrigger value="history">Lease history</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -368,6 +370,10 @@ export default function TenantProfilePage() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="documents">
+          <EntityDocuments entityType="TENANT" entityId={tenant.id} label={tenant.fullName} />
         </TabsContent>
       </Tabs>
 

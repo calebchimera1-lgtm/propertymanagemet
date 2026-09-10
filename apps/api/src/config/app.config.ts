@@ -85,4 +85,14 @@ export class AppConfig {
   get emailFrom(): string {
     return this.get('EMAIL_FROM');
   }
+  get storageDriver(): Env['STORAGE_DRIVER'] {
+    return this.get('STORAGE_DRIVER');
+  }
+  get storageLocalPath(): string {
+    return this.get('STORAGE_LOCAL_PATH');
+  }
+  /** The cap the upload pipeline enforces, in bytes. */
+  get maxUploadBytes(): number {
+    return this.get('MAX_UPLOAD_SIZE_MB') * 1024 * 1024;
+  }
 }

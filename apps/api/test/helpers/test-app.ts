@@ -70,7 +70,13 @@ export async function resetDatabase(prisma: PrismaService): Promise<void> {
     // Building references Property, StaffAssignment references both User and
     // Property. Getting this order wrong shows up as a foreign key violation,
     // which is the point — the constraints are real.
-    // Money first, innermost outward: Receipt references Payment, Payment
+    // Operations first: MaintenanceUpdate references MaintenanceRequest, and
+    // Document and Notification hang off User and Organization.
+    prisma.$executeRawUnsafe('DELETE FROM "MaintenanceUpdate"'),
+    prisma.$executeRawUnsafe('DELETE FROM "MaintenanceRequest"'),
+    prisma.$executeRawUnsafe('DELETE FROM "Document"'),
+    prisma.$executeRawUnsafe('DELETE FROM "Notification"'),
+    // Money next, innermost outward: Receipt references Payment, Payment
     // references RentRecord, and every one of them references Lease, Tenant,
     // Unit and Property with onDelete: Restrict — financial history is never
     // swept away by a cascade, here or in production.

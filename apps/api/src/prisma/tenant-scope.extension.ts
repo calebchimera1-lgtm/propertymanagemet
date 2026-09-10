@@ -26,6 +26,10 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'Receipt',
   'Expense',
   'NumberSequence',
+  'MaintenanceRequest',
+  'MaintenanceUpdate',
+  'Document',
+  'Notification',
 ]);
 
 const WHERE_OPERATIONS = new Set([

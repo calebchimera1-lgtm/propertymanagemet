@@ -62,6 +62,19 @@ export const queryKeys = {
   expenses: (params: Record<string, unknown> = {}) => ['expenses', params] as const,
   expense: (id: string) => ['expenses', 'detail', id] as const,
   expenseSummary: (params: Record<string, unknown> = {}) => ['expenses', 'summary', params] as const,
+
+  maintenance: (params: Record<string, unknown> = {}) => ['maintenance', params] as const,
+  maintenanceRequest: (id: string) => ['maintenance', 'detail', id] as const,
+  maintenanceSummary: ['maintenance', 'summary'] as const,
+  staff: (params: Record<string, unknown> = {}) => ['staff', params] as const,
+  staffMember: (id: string) => ['staff', 'detail', id] as const,
+  staffProperties: (id: string) => ['staff', 'properties', id] as const,
+  documents: (params: Record<string, unknown> = {}) => ['documents', params] as const,
+  document: (id: string) => ['documents', 'detail', id] as const,
+  notifications: (params: Record<string, unknown> = {}) => ['notifications', params] as const,
+  unreadNotifications: ['notifications', 'unread-count'] as const,
+  auditLogs: (params: Record<string, unknown> = {}) => ['audit-logs', params] as const,
+  auditActions: ['audit-logs', 'actions'] as const,
 };
 
 /**
@@ -99,3 +112,19 @@ export const FINANCE_ROOTS = [
   ['tenants'],
   ['leases'],
 ] as const;
+
+/**
+ * Operations writes ripple less than money ones, but they still cross screens:
+ * a status change lands on the board, the detail page, the summary counts and
+ * somebody's notification list at once.
+ */
+export const MAINTENANCE_ROOTS = [['maintenance'], ['notifications']] as const;
+
+/**
+ * A role or assignment change alters what that person can see everywhere, so
+ * the staff roots include the portfolio — an assignment removed here must not
+ * leave a stale property list cached on another screen.
+ */
+export const STAFF_ROOTS = [['staff'], ['users'], ['properties']] as const;
+
+export const DOCUMENT_ROOTS = [['documents']] as const;

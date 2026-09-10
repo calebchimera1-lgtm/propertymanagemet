@@ -120,6 +120,17 @@ describe('Property scope (e2e)', () => {
     }
     for (const property of [assigned, unassigned]) {
       await authed(app, owner)
+        .post('/maintenance')
+        .send({
+          propertyId: property.id,
+          title: `${property.name} broken tap`,
+          description: 'Dripping.',
+          priority: 'HIGH',
+        })
+        .expect(201);
+    }
+    for (const property of [assigned, unassigned]) {
+      await authed(app, owner)
         .post('/expenses')
         .send({
           propertyId: property.id,
@@ -250,12 +261,49 @@ describe('Property scope (e2e)', () => {
         .expect(404);
     });
 
+    it('sees only maintenance on the assigned property', async () => {
+      const response = await authed(app, caretaker).get('/maintenance').expect(200);
+      expect(response.body.meta.total).toBe(1);
+      expect(response.body.data[0].property.name).toBe('Assigned Estate');
+    });
+
+    it('cannot raise a job on a property it is not assigned to', async () => {
+      await authed(app, caretaker)
+        .post('/maintenance')
+        .send({
+          propertyId: unassigned.id,
+          title: 'Out of scope',
+          description: 'Should be refused.',
+        })
+        .expect(404);
+    });
+
+    it('cannot reach a request outside its scope, or widen scope with a filter', async () => {
+      const foreign = await prisma.maintenanceRequest.findFirstOrThrow({
+        where: { propertyId: unassigned.id },
+      });
+      await authed(app, caretaker).get(`/maintenance/${foreign.id}`).expect(404);
+      await authed(app, caretaker).get(`/maintenance?propertyId=${unassigned.id}`).expect(404);
+    });
+
+    it('counts only its own scope on the maintenance board', async () => {
+      // A summary that quietly included another estate's jobs would be a leak
+      // in the shape of a number.
+      const summary = await authed(app, caretaker).get('/maintenance/summary').expect(200);
+      expect(summary.body.counts.PENDING).toBe(1);
+    });
+
     it('cannot see rent or payments at all, whatever its scope', async () => {
       // Scope narrows what a role can reach; it never grants a permission the
       // role does not hold.
       await authed(app, caretaker).get('/rent').expect(403);
       await authed(app, caretaker).get('/payments').expect(403);
       await authed(app, caretaker).get('/receipts').expect(403);
+    });
+
+    it('cannot manage staff or read the audit trail', async () => {
+      await authed(app, caretaker).get('/staff').expect(403);
+      await authed(app, caretaker).get('/audit-logs').expect(403);
     });
 
     it('can change a unit status inside its scope but not outside it', async () => {
@@ -413,6 +461,10 @@ describe('Property scope (e2e)', () => {
     const expenses = await authed(app, caretaker).get('/expenses').expect(200);
     expect(expenses.body.meta.total).toBe(0);
     expect(expenses.body.totalAmount).toBe('0.00');
+
+    const maintenance = await authed(app, caretaker).get('/maintenance').expect(200);
+    expect(maintenance.body.meta.total).toBe(0);
+    expect(maintenance.body.openCount).toBe(0);
 
     await authed(app, caretaker).get(`/properties/${assigned.id}`).expect(404);
   });

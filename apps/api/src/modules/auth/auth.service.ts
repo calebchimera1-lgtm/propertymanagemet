@@ -351,7 +351,12 @@ export class AuthService {
     });
   }
 
-  /** Consumes the token, sets the new password, and kills every session. */
+  /**
+   * Consumes the token, sets the new password, and kills every session.
+   *
+   * Also the invite-acceptance path: a staff invite is a single-use reset link,
+   * so an INVITED account becomes ACTIVE here.
+   */
   async resetPassword(dto: ResetPasswordDto): Promise<void> {
     const record = await this.prisma.passwordResetToken.findUnique({
       where: { tokenHash: this.tokens.hash(dto.token) },
@@ -359,7 +364,7 @@ export class AuthService {
         id: true,
         usedAt: true,
         expiresAt: true,
-        user: { select: { id: true, email: true, organizationId: true } },
+        user: { select: { id: true, email: true, organizationId: true, status: true } },
       },
     });
 
@@ -381,7 +386,20 @@ export class AuthService {
       });
       await tx.user.update({
         where: { id: record.user.id },
-        data: { passwordHash, failedLoginCount: 0, lockedUntil: null },
+        data: {
+          passwordHash,
+          failedLoginCount: 0,
+          lockedUntil: null,
+          /*
+           * Accepting an invite activates the account — and only an invite.
+           *
+           * A staff invite is delivered as a reset link, so without this an
+           * invited user could set a password and still be refused at login.
+           * INVITED is the only status promoted: a stale link must never let a
+           * deactivated or suspended account reactivate itself.
+           */
+          ...(record.user.status === 'INVITED' ? { status: 'ACTIVE' as const } : {}),
+        },
       });
       // Whoever was signed in as this user — including an attacker — is out.
       await tx.session.updateMany({

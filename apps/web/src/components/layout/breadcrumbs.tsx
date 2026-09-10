@@ -6,7 +6,6 @@ import { ChevronRight } from 'lucide-react';
 
 const LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
-  users: 'Users',
   settings: 'Settings',
   profile: 'Profile',
   properties: 'Properties',
@@ -18,6 +17,10 @@ const LABELS: Record<string, string> = {
   payments: 'Payments',
   receipts: 'Receipts',
   expenses: 'Expenses',
+  maintenance: 'Maintenance',
+  staff: 'Staff',
+  documents: 'Documents',
+  notifications: 'Notifications',
 };
 
 /** A cuid segment is a record id, not a page name — show it as one. */

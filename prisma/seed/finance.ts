@@ -56,8 +56,24 @@ export async function seedFinance(prisma: PrismaClient): Promise<void> {
 
   let charges = 0;
   let payments = 0;
-  let receiptCounter = 0;
   const year = new Date().getUTCFullYear();
+
+  /*
+   * Receipt numbers are derived from the charge, not from a counter.
+   *
+   * A run-local counter restarts at zero every time, so the moment a re-run
+   * creates one new payment it reissues a number the first run already used and
+   * the unique index refuses it. Deriving from (lease index, months back) makes
+   * the number stable for a given charge, which is what "idempotent" has to
+   * mean here — and keeps seeded receipts well clear of the 000001-upward range
+   * the application itself allocates.
+   */
+  let highestSeededReceipt = 900000;
+  const seedReceiptNumber = (leaseIndex: number, monthsBack: number): string => {
+    const value = 900000 + leaseIndex * 10 + monthsBack;
+    highestSeededReceipt = Math.max(highestSeededReceipt, value);
+    return `${prefix}-${abc.code}-${year}-${String(value).padStart(6, '0')}`;
+  };
 
   // Three months back to this one, so trends have more than a single point.
   for (let offset = 3; offset >= 0; offset--) {
@@ -115,7 +131,6 @@ export async function seedFinance(prisma: PrismaClient): Promise<void> {
       if (already > 0) continue;
 
       const paymentDate = new Date(Date.UTC(periodYear, month, Math.min(lease.dueDay + 2, 28)));
-      receiptCounter++;
 
       const payment = await prisma.payment.create({
         data: {
@@ -139,7 +154,7 @@ export async function seedFinance(prisma: PrismaClient): Promise<void> {
         data: {
           organizationId: abc.id,
           paymentId: payment.id,
-          receiptNumber: `${prefix}-${abc.code}-${year}-${String(900000 + receiptCounter).padStart(6, '0')}`,
+          receiptNumber: seedReceiptNumber(index, offset),
           tenantId: lease.tenantId,
           propertyId: lease.propertyId,
           unitId: lease.unitId,
@@ -154,11 +169,18 @@ export async function seedFinance(prisma: PrismaClient): Promise<void> {
     }
   }
 
-  // Keep the seeded receipt numbers out of the live counter's way.
+  /*
+   * Push the live counter past every seeded number.
+   *
+   * The application allocates the next receipt from this row, and a collision
+   * would fail a real payment at the moment someone hands over money — so the
+   * counter starts above the highest number the seed actually used, not above a
+   * number the seed assumed it would use.
+   */
   await prisma.numberSequence.upsert({
     where: { organizationId_key_year: { organizationId: abc.id, key: 'RECEIPT', year } },
-    create: { organizationId: abc.id, key: 'RECEIPT', year, lastValue: 900000 + receiptCounter },
-    update: {},
+    create: { organizationId: abc.id, key: 'RECEIPT', year, lastValue: highestSeededReceipt },
+    update: { lastValue: { set: highestSeededReceipt } },
   });
 
   const properties = await prisma.property.findMany({

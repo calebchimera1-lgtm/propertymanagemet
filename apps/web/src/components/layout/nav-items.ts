@@ -1,9 +1,11 @@
 import {
+  BarChart3,
   Blocks,
   Building2,
   CircleDollarSign,
   DoorClosed,
   FileText,
+  FolderOpen,
   Home,
   Receipt,
   Settings,
@@ -66,17 +68,22 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: 'Organization',
+    label: 'Operations',
     items: [
-      { label: 'Users', href: '/users', icon: Users, permission: 'staff.view' },
-      { label: 'Settings', href: '/settings', icon: Settings, permission: 'settings.view' },
+      { label: 'Maintenance', href: '/maintenance', icon: Wrench, permission: 'maintenance.view' },
+      { label: 'Staff', href: '/staff', icon: Users, permission: 'staff.view' },
+      { label: 'Documents', href: '/documents', icon: FolderOpen, permission: 'documents.view' },
     ],
+  },
+  {
+    label: 'Organization',
+    items: [{ label: 'Settings', href: '/settings', icon: Settings, permission: 'settings.view' }],
   },
 ];
 
 /** Referenced by the dashboard's roadmap panel so the two never drift apart. */
 export const UPCOMING_SECTIONS = [
-  { label: 'Maintenance requests and work orders', icon: Wrench, phase: 'Phase 5' },
-  { label: 'Documents and file uploads', icon: FileText, phase: 'Phase 5' },
-  { label: 'Dashboard metrics and reports', icon: Receipt, phase: 'Phase 6' },
+  { label: 'Dashboard metrics and charts', icon: BarChart3, phase: 'Phase 6' },
+  { label: 'The nine reports, with CSV and PDF export', icon: FileText, phase: 'Phase 6' },
+  { label: 'Security hardening and accessibility pass', icon: Receipt, phase: 'Phase 7' },
 ];

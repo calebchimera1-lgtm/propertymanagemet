@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSession } from '@/features/auth/use-session';
+import { EntityDocuments } from '@/features/operations/components/entity-documents';
 import { BuildingFormDialog } from '@/features/portfolio/components/building-form-dialog';
 import { PropertyFormDialog } from '@/features/portfolio/components/property-form-dialog';
 import { UnitFormDialog } from '@/features/portfolio/components/unit-form-dialog';
@@ -147,6 +148,7 @@ export default function PropertyDetailPage() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="buildings">Buildings</TabsTrigger>
           <TabsTrigger value="units">Units</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -265,6 +267,10 @@ export default function PropertyDetailPage() {
               onRowClick={(unit) => router.push(`/units/${unit.id}`)}
             />
           )}
+        </TabsContent>
+
+        <TabsContent value="documents">
+          <EntityDocuments entityType="PROPERTY" entityId={record.id} label={record.name} />
         </TabsContent>
       </Tabs>
 

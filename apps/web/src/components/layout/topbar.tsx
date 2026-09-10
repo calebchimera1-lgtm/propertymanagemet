@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Breadcrumbs } from './breadcrumbs';
+import { NotificationBell } from './notification-bell';
 import { SidebarNav } from './sidebar';
 import { UserMenu } from './user-menu';
 
@@ -28,6 +29,7 @@ export function Topbar() {
       <Breadcrumbs />
 
       <div className="ml-auto flex items-center gap-2">
+        <NotificationBell />
         <UserMenu />
       </div>
     </header>

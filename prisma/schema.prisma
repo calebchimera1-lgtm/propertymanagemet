@@ -144,6 +144,45 @@ enum UnitStatus {
   UNAVAILABLE
 }
 
+/// PENDING → ASSIGNED → IN_PROGRESS → COMPLETED. CANCELLED from any live state.
+/// COMPLETED and CANCELLED are terminal: a fault that comes back is a new
+/// request, so each job carries its own cost and its own timeline.
+enum MaintenanceStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum MaintenancePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+/// What a document is filed against. ORGANIZATION covers anything with no
+/// narrower home — a licence, an insurance certificate.
+enum DocumentEntityType {
+  PROPERTY
+  BUILDING
+  UNIT
+  TENANT
+  LEASE
+  EXPENSE
+  MAINTENANCE
+  ORGANIZATION
+}
+
+enum NotificationType {
+  RENT_OVERDUE
+  PAYMENT_RECORDED
+  LEASE_EXPIRING
+  MAINTENANCE_UPDATED
+  SYSTEM
+}
+
 enum RoleName {
   SUPER_ADMIN
   PROPERTY_OWNER
@@ -191,6 +230,10 @@ model Organization {
   payments         Payment[]
   receipts         Receipt[]
   expenses         Expense[]
+  maintenance      MaintenanceRequest[]
+  maintenanceUpdates MaintenanceUpdate[]
+  documents        Document[]
+  notifications    Notification[]
   numberSequences  NumberSequence[]
 
   /// Referenced by the composite foreign keys below. Every child row carries
@@ -249,6 +292,11 @@ model User {
   auditLogs              AuditLog[]
   staffAssignments       StaffAssignment[]        @relation("AssignedStaff")
   assignmentsMade        StaffAssignment[]        @relation("AssignedBy")
+  maintenanceAssigned    MaintenanceRequest[]     @relation("MaintenanceAssignee")
+  maintenanceReported    MaintenanceRequest[]     @relation("MaintenanceReporter")
+  maintenanceUpdates     MaintenanceUpdate[]
+  documentsUploaded      Document[]
+  notifications          Notification[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -451,6 +499,7 @@ model Property {
   payments         Payment[]
   receipts         Receipt[]
   expenses         Expense[]
+  maintenance      MaintenanceRequest[]
 
   @@unique([organizationId, id])
   @@unique([organizationId, name])
@@ -481,6 +530,7 @@ model Building {
   rentRecords  RentRecord[]
   payments     Payment[]
   expenses     Expense[]
+  maintenance  MaintenanceRequest[]
 
   @@unique([organizationId, id])
   @@unique([propertyId, name])
@@ -523,6 +573,7 @@ model Unit {
   payments     Payment[]
   receipts     Receipt[]
   expenses     Expense[]
+  maintenance  MaintenanceRequest[]
 
   @@unique([organizationId, id])
   @@index([organizationId])
@@ -588,6 +639,7 @@ model Tenant {
   rentRecords  RentRecord[]
   payments     Payment[]
   receipts     Receipt[]
+  maintenance  MaintenanceRequest[]
 
   @@unique([organizationId, id])
   @@index([organizationId])
@@ -842,4 +894,129 @@ model NumberSequence {
 
   @@unique([organizationId, key, year])
   @@index([organizationId])
+}
+
+// ── Operations (Phase 5) ─────────────────────────────────────────────────────
+
+/// A job of work on a property: a burst pipe, a broken lock, a lift service.
+///
+/// `unitId` and `tenantId` are optional because plenty of work is on the
+/// building rather than in someone's flat — a generator service belongs to the
+/// property, not to a tenant.
+model MaintenanceRequest {
+  id             String              @id @default(cuid())
+  organizationId String
+  propertyId     String
+  buildingId     String?
+  unitId         String?
+  tenantId       String?
+  title          String
+  description    String
+  priority       MaintenancePriority @default(MEDIUM)
+  status         MaintenanceStatus   @default(PENDING)
+  /// The staff member responsible. Nullable: an unassigned request is a real
+  /// state, and clearing it must not delete the job.
+  assignedToId   String?
+  estimatedCost  Decimal?            @db.Decimal(14, 2)
+  actualCost     Decimal?            @db.Decimal(14, 2)
+  reportedById   String?
+  completedAt    DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  property     Property            @relation(fields: [organizationId, propertyId], references: [organizationId, id], onDelete: Restrict)
+  building     Building?           @relation(fields: [organizationId, buildingId], references: [organizationId, id], onDelete: Restrict)
+  unit         Unit?               @relation(fields: [organizationId, unitId], references: [organizationId, id], onDelete: Restrict)
+  tenant       Tenant?             @relation(fields: [organizationId, tenantId], references: [organizationId, id], onDelete: Restrict)
+  assignedTo   User?               @relation("MaintenanceAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  reportedBy   User?               @relation("MaintenanceReporter", fields: [reportedById], references: [id], onDelete: SetNull)
+  updates      MaintenanceUpdate[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, priority])
+  @@index([organizationId, propertyId])
+  @@index([organizationId, assignedToId])
+  @@index([organizationId, status, createdAt])
+}
+
+/// One entry on a request's timeline.
+///
+/// Every status change writes one of these, so the history of a job is a table
+/// of rows rather than a column that only remembers its latest value.
+model MaintenanceUpdate {
+  id                   String             @id @default(cuid())
+  organizationId       String
+  maintenanceRequestId String
+  authorId             String?
+  note                 String
+  fromStatus           MaintenanceStatus?
+  toStatus             MaintenanceStatus?
+  createdAt            DateTime           @default(now())
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  request      MaintenanceRequest @relation(fields: [organizationId, maintenanceRequestId], references: [organizationId, id], onDelete: Cascade)
+  author       User?              @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([organizationId, maintenanceRequestId, createdAt])
+}
+
+/// An uploaded file's metadata. The bytes live behind a FileStorageProvider.
+///
+/// `storageKey` is generated by the server — `org/{orgId}/{yyyy}/{mm}/{uuid}{ext}`
+/// — and user input never contributes to it, so no filename can traverse a
+/// path. `originalFilename` is display metadata and nothing else.
+model Document {
+  id               String             @id @default(cuid())
+  organizationId   String
+  entityType       DocumentEntityType
+  /// Null only for ORGANIZATION-level documents, which have no narrower owner.
+  entityId         String?
+  name             String
+  originalFilename String
+  storageKey       String
+  mimeType         String
+  sizeBytes        Int
+  /// SHA-256 of the stored bytes, so a swapped or corrupted object is detectable.
+  checksum         String
+  uploadedById     String?
+  createdAt        DateTime           @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uploadedBy   User?        @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, storageKey])
+  @@index([organizationId])
+  @@index([organizationId, entityType, entityId])
+  @@index([organizationId, createdAt])
+}
+
+/// An in-app alert addressed to one user.
+///
+/// `dedupeKey` plus a unique index is what stops a daily sweep telling someone
+/// the same charge is overdue every morning: it is the calendar day the alert
+/// is about, so the same fact on the same day collapses to one row.
+model Notification {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String
+  type           NotificationType
+  title          String
+  body           String
+  entityType     String?
+  entityId       String?
+  /// "RENT_OVERDUE:cku…:2026-09-10" — the fact, not the wording.
+  dedupeKey      String?
+  readAt         DateTime?
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, userId, readAt])
+  @@index([organizationId, userId, createdAt])
 }

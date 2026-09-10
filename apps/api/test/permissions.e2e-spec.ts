@@ -44,6 +44,11 @@ describe('Permissions (e2e)', () => {
     { method: 'GET' as const, path: '/receipts', permission: 'receipts.view' },
     { method: 'GET' as const, path: '/expenses', permission: 'expenses.view' },
     { method: 'GET' as const, path: '/expenses/summary', permission: 'expenses.view' },
+    { method: 'GET' as const, path: '/maintenance', permission: 'maintenance.view' },
+    { method: 'GET' as const, path: '/maintenance/summary', permission: 'maintenance.view' },
+    { method: 'GET' as const, path: '/documents', permission: 'documents.view' },
+    { method: 'GET' as const, path: '/audit-logs', permission: 'auditlogs.view' },
+    { method: 'GET' as const, path: '/audit-logs/actions', permission: 'auditlogs.view' },
   ];
 
   async function createUserWithRole(role: RoleName): Promise<SignedIn> {

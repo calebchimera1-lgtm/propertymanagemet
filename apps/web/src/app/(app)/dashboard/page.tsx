@@ -31,6 +31,7 @@ const DELIVERED_SECTIONS = [
   'Properties, buildings and units',
   'Tenants and leases',
   'Rent, payments, receipts and expenses',
+  'Maintenance, staff, documents and the audit trail',
 ];
 
 export default function DashboardPage() {
@@ -87,9 +88,9 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <Button asChild variant="outline" size="sm">
-                <Link href="/users">
+                <Link href="/staff">
                   <UsersIcon className="h-4 w-4" aria-hidden />
-                  View users
+                  Manage staff
                 </Link>
               </Button>
             </CardContent>
@@ -113,9 +114,9 @@ export default function DashboardPage() {
         <CardHeader>
           <CardTitle>What is available so far</CardTitle>
           <CardDescription>
-            Accounts and permissions, the property portfolio, tenants and leases, and rent,
-            payments, receipts and expenses all work today. The sections below are built in later
-            phases and are not shown in the navigation until they do.
+            Accounts and permissions, the property portfolio, tenants and leases, rent and
+            payments, and the day-to-day operations layer all work today. The sections below are
+            built in later phases and are not shown in the navigation until they do.
           </CardDescription>
         </CardHeader>
         <CardContent>

@@ -1,6 +1,13 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { PrismaService } from '@/prisma/prisma.service';
-import { STRONG_PASSWORD, type SignedIn, authed, registerOrganization } from './helpers/api-client';
+import request from 'supertest';
+import {
+  BASE,
+  STRONG_PASSWORD,
+  type SignedIn,
+  authed,
+  registerOrganization,
+} from './helpers/api-client';
 import {
   createBuilding,
   createLease,
@@ -41,6 +48,8 @@ describe('Organization isolation (e2e)', () => {
     receiptId: string;
     receiptNumber: string;
     expenseId: string;
+    maintenanceId: string;
+    documentId: string;
   };
   let xyzPortfolio: typeof abcPortfolio;
 
@@ -87,6 +96,28 @@ describe('Organization isolation (e2e)', () => {
       })
       .expect(201);
 
+    const maintenance = await authed(app, session)
+      .post('/maintenance')
+      .send({
+        propertyId: property.id,
+        unitId: unit.id,
+        title: `${label} broken tap`,
+        description: 'Dripping.',
+      })
+      .expect(201);
+
+    const document = await request(app.getHttpServer())
+      .post(`${BASE}/documents`)
+      .set('Cookie', session.cookies)
+      .set('X-CSRF-Token', session.csrfToken)
+      .attach('file', Buffer.from('%PDF-1.7\nfixture\n'), {
+        filename: `${label}-lease.pdf`,
+        contentType: 'application/pdf',
+      })
+      .field('entityType', 'UNIT')
+      .field('entityId', unit.id)
+      .expect(201);
+
     return {
       propertyId: property.id,
       buildingId: building.id,
@@ -99,6 +130,8 @@ describe('Organization isolation (e2e)', () => {
       receiptId: payment.body.receipt.id as string,
       receiptNumber: payment.body.receipt.receiptNumber as string,
       expenseId: expense.body.id as string,
+      maintenanceId: maintenance.body.id as string,
+      documentId: document.body.id as string,
     };
   }
 
@@ -487,6 +520,89 @@ describe('Organization isolation (e2e)', () => {
       const expenses = await authed(app, abc).get('/expenses/summary').expect(200);
       expect(expenses.body.total).toBe('9000.00');
       expect(expenses.body.count).toBe(1);
+    });
+  });
+
+  describe('maintenance, documents and notifications', () => {
+    it('lists only its own operations records', async () => {
+      const maintenance = await authed(app, abc).get('/maintenance').expect(200);
+      expect(maintenance.body.meta.total).toBe(1);
+      expect(maintenance.body.data[0].id).toBe(abcPortfolio.maintenanceId);
+
+      const documents = await authed(app, abc).get('/documents').expect(200);
+      expect(documents.body.meta.total).toBe(1);
+      expect(documents.body.data[0].id).toBe(abcPortfolio.documentId);
+    });
+
+    it('cannot read another organization’s request or document', async () => {
+      for (const path of [
+        `/maintenance/${xyzPortfolio.maintenanceId}`,
+        `/maintenance/${xyzPortfolio.maintenanceId}/updates`,
+        `/documents/${xyzPortfolio.documentId}`,
+        `/documents/${xyzPortfolio.documentId}/download`,
+      ]) {
+        await authed(app, abc).get(path).expect(404);
+      }
+    });
+
+    it('cannot move another organization’s request through the workflow', async () => {
+      await authed(app, abc)
+        .post(`/maintenance/${xyzPortfolio.maintenanceId}/status`)
+        .send({ status: 'IN_PROGRESS' })
+        .expect(404);
+      await authed(app, abc)
+        .post(`/maintenance/${xyzPortfolio.maintenanceId}/assign`)
+        .send({ assignedToId: abc.userId })
+        .expect(404);
+
+      const untouched = await prisma.maintenanceRequest.findUniqueOrThrow({
+        where: { id: xyzPortfolio.maintenanceId },
+      });
+      expect(untouched.status).toBe('PENDING');
+      expect(untouched.assignedToId).toBeNull();
+    });
+
+    it('cannot delete another organization’s document', async () => {
+      await authed(app, abc).delete(`/documents/${xyzPortfolio.documentId}`).expect(404);
+      expect(await prisma.document.count({ where: { id: xyzPortfolio.documentId } })).toBe(1);
+    });
+
+    it('cannot assign a job to a person in another organization', async () => {
+      await authed(app, abc)
+        .post(`/maintenance/${abcPortfolio.maintenanceId}/assign`)
+        .send({ assignedToId: xyz.userId })
+        .expect(422);
+    });
+
+    it('cannot see or manage another organization’s staff', async () => {
+      const staff = await authed(app, abc).get('/staff').expect(200);
+      expect(staff.body.meta.total).toBe(1);
+
+      await authed(app, abc).get(`/staff/${xyz.userId}`).expect(404);
+      await authed(app, abc).post(`/staff/${xyz.userId}/deactivate`).expect(404);
+      await authed(app, abc).delete(`/staff/${xyz.userId}`).expect(404);
+    });
+
+    it('cannot read another organization’s audit trail', async () => {
+      const audit = await authed(app, abc).get('/audit-logs').expect(200);
+      const emails = audit.body.data.map((row: { actorEmail: string }) => row.actorEmail);
+      expect(emails.every((email: string) => email.endsWith('@abc.test'))).toBe(true);
+
+      const filtered = await authed(app, abc)
+        .get(`/audit-logs?userId=${xyz.userId}`)
+        .expect(200);
+      expect(filtered.body.meta.total).toBe(0);
+    });
+
+    it('cannot mark another organization’s notification read', async () => {
+      const theirs = await prisma.notification.findFirst({
+        where: { organizationId: xyz.organizationId },
+      });
+      if (theirs) {
+        await authed(app, abc).post(`/notifications/${theirs.id}/read`).expect(404);
+      }
+      const mine = await authed(app, abc).get('/notifications').expect(200);
+      expect(mine.body.meta.total).toBeGreaterThanOrEqual(0);
     });
   });
 

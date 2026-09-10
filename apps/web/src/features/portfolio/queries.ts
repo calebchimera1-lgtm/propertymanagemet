@@ -57,11 +57,17 @@ export function useBuilding(id: string) {
   });
 }
 
-export function useUnits(query: Query) {
+/**
+ * @param enabled Skip the request entirely until it makes sense to make one —
+ * a unit list is scoped to a property, and fetching every unit in the portfolio
+ * before one is chosen is a long list nobody asked for.
+ */
+export function useUnits(query: Query, enabled = true) {
   return useQuery({
     queryKey: queryKeys.units(query),
     queryFn: () => portfolioApi.units.list(query),
     placeholderData: keepPreviousData,
+    enabled,
   });
 }
 
