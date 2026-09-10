@@ -252,9 +252,9 @@ export class PropertiesService {
   /**
    * Hard delete, and only when there is nothing to lose.
    *
-   * A property with buildings or units is refused with a 409 that names the
-   * counts and points at archiving. From Phase 4 the same check will cover
-   * financial history, which must never be removed by a convenience action.
+   * A property with buildings, units or financial history is refused with a 409
+   * that names the counts and points at archiving. Accounting records are never
+   * removed by a convenience action.
    */
   async remove(id: string): Promise<void> {
     const auth = this.tenant.getOrThrow();
@@ -271,6 +271,27 @@ export class PropertiesService {
         'PROPERTY_NOT_EMPTY',
         `This property still has ${property._count.buildings} building(s) and ${property._count.units} unit(s). ` +
           'Archive it instead, or remove its units first.',
+      );
+    }
+
+    /*
+     * An empty property can still have expenses booked against it — a security
+     * contract or a land rate is charged to the property, not to a unit. The
+     * database refuses the delete as well; counting here is what makes the
+     * refusal readable.
+     */
+    const [rentCount, paymentCount, expenseCount] = await Promise.all([
+      this.db.rentRecord.count({ where: { propertyId: id } }),
+      this.db.payment.count({ where: { propertyId: id } }),
+      this.db.expense.count({ where: { propertyId: id } }),
+    ]);
+
+    if (rentCount > 0 || paymentCount > 0 || expenseCount > 0) {
+      throw new ConflictError(
+        'PROPERTY_HAS_FINANCIAL_HISTORY',
+        `This property has ${rentCount} rent charge(s), ${paymentCount} payment(s) and ` +
+          `${expenseCount} expense(s) recorded against it. Financial history is never deleted — ` +
+          'archive the property instead.',
       );
     }
 

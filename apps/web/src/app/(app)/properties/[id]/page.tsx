@@ -181,8 +181,8 @@ export default function PropertyDetailPage() {
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground">
                   {/* Said plainly: this is what the property would bill at full
-                      occupancy, not money anyone has collected. Collections
-                      arrive in Phase 4. */}
+                      occupancy, not money anyone has collected — the rent screen
+                      is where collections are reported. */}
                   At full occupancy. Not collected income.
                 </CardContent>
               </Card>

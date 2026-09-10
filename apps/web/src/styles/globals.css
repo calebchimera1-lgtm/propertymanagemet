@@ -86,9 +86,44 @@
   }
 }
 
-/* Receipts and reports print without the app chrome (used from Phase 4). */
+/*
+ * Printing.
+ *
+ * A receipt is a document a tenant is handed, so the printed page must be the
+ * receipt and nothing else: sidebar, topbar, buttons and breadcrumbs are marked
+ * .no-print and disappear, the page chrome loses its card shadows and tinted
+ * backgrounds, and .print-page takes over the sheet at full width.
+ */
 @media print {
   .no-print {
     display: none !important;
+  }
+
+  @page {
+    margin: 14mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .print-page {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: 0 !important;
+  }
+
+  /* Keep a receipt on one sheet rather than splitting a table mid-total. */
+  .print-keep-together {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  a[href]::after {
+    content: '';
   }
 }

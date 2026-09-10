@@ -26,6 +26,9 @@ describe('Organization isolation (e2e)', () => {
   let prisma: PrismaService;
   let abc: SignedIn;
   let xyz: SignedIn;
+  /** A month the seeded lease (2026-01-01 → 2026-12-31) covers. */
+  const PERIOD = '2026-06';
+
   let abcPortfolio: {
     propertyId: string;
     buildingId: string;
@@ -33,6 +36,11 @@ describe('Organization isolation (e2e)', () => {
     tenantId: string;
     leaseId: string;
     spareUnitId: string;
+    rentRecordId: string;
+    paymentId: string;
+    receiptId: string;
+    receiptNumber: string;
+    expenseId: string;
   };
   let xyzPortfolio: typeof abcPortfolio;
 
@@ -51,6 +59,34 @@ describe('Organization isolation (e2e)', () => {
       buildingId: building.id,
       unitNumber: `${label}-SPARE`,
     });
+    // A charge, a payment, a receipt and an expense, so the finance assertions
+    // below are about real records rather than empty tables.
+    await authed(app, session).post('/rent/generate').send({ period: PERIOD }).expect(201);
+    const roll = await authed(app, session).get('/rent').query({ period: PERIOD }).expect(200);
+    const rentRecordId = roll.body.data[0].id as string;
+
+    const payment = await authed(app, session)
+      .post('/payments')
+      .send({
+        rentRecordId,
+        amount: '5000.00',
+        paymentDate: '2026-06-05',
+        paymentMethod: 'MPESA',
+        reference: `${label}-REF-1`,
+      })
+      .expect(201);
+
+    const expense = await authed(app, session)
+      .post('/expenses')
+      .send({
+        propertyId: property.id,
+        category: 'REPAIRS',
+        description: `${label} pump repair`,
+        amount: '9000.00',
+        expenseDate: '2026-06-08',
+      })
+      .expect(201);
+
     return {
       propertyId: property.id,
       buildingId: building.id,
@@ -58,6 +94,11 @@ describe('Organization isolation (e2e)', () => {
       tenantId: tenant.id,
       leaseId: lease.id,
       spareUnitId: spare.id,
+      rentRecordId,
+      paymentId: payment.body.id as string,
+      receiptId: payment.body.receipt.id as string,
+      receiptNumber: payment.body.receipt.receiptNumber as string,
+      expenseId: expense.body.id as string,
     };
   }
 
@@ -357,6 +398,98 @@ describe('Organization isolation (e2e)', () => {
     });
   });
 
+  describe('rent, payments, receipts and expenses', () => {
+    it('lists only its own money', async () => {
+      const rent = await authed(app, abc).get('/rent').query({ period: PERIOD }).expect(200);
+      expect(rent.body.meta.total).toBe(1);
+      expect(rent.body.data[0].id).toBe(abcPortfolio.rentRecordId);
+
+      const payments = await authed(app, abc).get('/payments').expect(200);
+      expect(payments.body.meta.total).toBe(1);
+      expect(payments.body.data[0].id).toBe(abcPortfolio.paymentId);
+      expect(payments.body.totalAmount).toBe('5000.00');
+
+      const receipts = await authed(app, abc).get('/receipts').expect(200);
+      expect(receipts.body.meta.total).toBe(1);
+      expect(receipts.body.data[0].id).toBe(abcPortfolio.receiptId);
+
+      const expenses = await authed(app, abc).get('/expenses').expect(200);
+      expect(expenses.body.meta.total).toBe(1);
+      expect(expenses.body.totalAmount).toBe('9000.00');
+    });
+
+    it('cannot read another organization\'s charge, payment, receipt or expense', async () => {
+      for (const path of [
+        `/rent/${xyzPortfolio.rentRecordId}`,
+        `/payments/${xyzPortfolio.paymentId}`,
+        `/receipts/${xyzPortfolio.receiptId}`,
+        `/expenses/${xyzPortfolio.expenseId}`,
+      ]) {
+        // 404, never 403: a 403 would confirm the record exists.
+        await authed(app, abc).get(path).expect(404);
+      }
+    });
+
+    it('cannot pay another organization\'s charge', async () => {
+      await authed(app, abc)
+        .post('/payments')
+        .send({
+          rentRecordId: xyzPortfolio.rentRecordId,
+          amount: '1000.00',
+          paymentDate: '2026-06-06',
+          paymentMethod: 'CASH',
+        })
+        .expect(404);
+
+      const payments = await prisma.payment.count({ where: { rentRecordId: xyzPortfolio.rentRecordId } });
+      expect(payments).toBe(1);
+    });
+
+    it('cannot void another organization\'s payment', async () => {
+      await authed(app, abc)
+        .post(`/payments/${xyzPortfolio.paymentId}/void`)
+        .send({ reason: 'Not mine to void' })
+        .expect(404);
+
+      const payment = await prisma.payment.findUniqueOrThrow({
+        where: { id: xyzPortfolio.paymentId },
+      });
+      expect(payment.status).toBe('COMPLETED');
+    });
+
+    it('cannot update or delete another organization\'s expense', async () => {
+      await authed(app, abc)
+        .patch(`/expenses/${xyzPortfolio.expenseId}`)
+        .send({ amount: '1.00' })
+        .expect(404);
+      await authed(app, abc).delete(`/expenses/${xyzPortfolio.expenseId}`).expect(404);
+
+      const expense = await prisma.expense.findUniqueOrThrow({
+        where: { id: xyzPortfolio.expenseId },
+      });
+      expect(expense.amount.toFixed(2)).toBe('9000.00');
+    });
+
+    it('numbers receipts per organization, so both start at one', async () => {
+      // Sequences are per-organization: XYZ's first receipt is number 1 even
+      // though ABC already issued one. A global counter would leak how much
+      // business another organization is doing.
+      expect(abcPortfolio.receiptNumber).toMatch(/-000001$/);
+      expect(xyzPortfolio.receiptNumber).toMatch(/-000001$/);
+      expect(abcPortfolio.receiptNumber).not.toBe(xyzPortfolio.receiptNumber);
+    });
+
+    it('reports summaries covering only its own charges', async () => {
+      const summary = await authed(app, abc).get('/rent/summary').query({ period: PERIOD }).expect(200);
+      expect(summary.body.totals.collected).toBe('5000.00');
+      expect(summary.body.recordCount).toBe(1);
+
+      const expenses = await authed(app, abc).get('/expenses/summary').expect(200);
+      expect(expenses.body.total).toBe('9000.00');
+      expect(expenses.body.count).toBe(1);
+    });
+  });
+
   describe('the database itself', () => {
     it('refuses a cross-organization lease even with the API bypassed', async () => {
       await expect(
@@ -371,6 +504,25 @@ describe('Organization isolation (e2e)', () => {
             startDate: new Date('2026-01-01'),
             monthlyRent: '1000',
             dueDay: 5,
+          },
+        }),
+      ).rejects.toThrow(/[Ff]oreign key/);
+    });
+
+    it('refuses a cross-organization payment even with the API bypassed', async () => {
+      await expect(
+        prisma.payment.create({
+          data: {
+            organizationId: xyz.organizationId,
+            leaseId: abcPortfolio.leaseId,
+            rentRecordId: abcPortfolio.rentRecordId,
+            tenantId: abcPortfolio.tenantId,
+            propertyId: abcPortfolio.propertyId,
+            unitId: abcPortfolio.unitId,
+            amount: '1000',
+            paymentDate: new Date('2026-06-05'),
+            paymentMethod: 'CASH',
+            recordedById: xyz.userId,
           },
         }),
       ).rejects.toThrow(/[Ff]oreign key/);

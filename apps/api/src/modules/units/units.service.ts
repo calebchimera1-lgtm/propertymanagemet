@@ -103,7 +103,7 @@ export class UnitsService {
     return paginated(rows.map((row) => this.serialise(row)), total, query.page, query.limit);
   }
 
-  /** Feed for the lease form in Phase 3, and useful on its own today. */
+  /** Feed for the lease form's unit picker, and useful on its own. */
   async listVacant(propertyId?: string) {
     if (propertyId) this.scope.assertProperty(propertyId, 'Unit');
 
@@ -298,12 +298,34 @@ export class UnitsService {
     });
     if (!unit) throw new NotFoundError('Unit');
 
-    // From Phase 3 this check also covers leases and, from Phase 4, payment
-    // history — which is never deleted by a convenience action.
     if (unit.status === 'OCCUPIED') {
       throw new ConflictError(
         'UNIT_OCCUPIED',
         'An occupied unit cannot be deleted. End the lease first.',
+      );
+    }
+
+    /*
+     * A vacant unit can still carry a financial history — last year's tenant
+     * paid rent against it, and those payments and receipts are accounting
+     * records.
+     *
+     * The database refuses this too (every financial relation is onDelete:
+     * Restrict), but a raw foreign-key error tells the user nothing. Counting
+     * first turns it into a sentence that names what is in the way.
+     */
+    const [rentCount, paymentCount, expenseCount] = await Promise.all([
+      this.db.rentRecord.count({ where: { unitId: id } }),
+      this.db.payment.count({ where: { unitId: id } }),
+      this.db.expense.count({ where: { unitId: id } }),
+    ]);
+
+    if (rentCount > 0 || paymentCount > 0 || expenseCount > 0) {
+      throw new ConflictError(
+        'UNIT_HAS_FINANCIAL_HISTORY',
+        `This unit has ${rentCount} rent charge(s), ${paymentCount} payment(s) and ` +
+          `${expenseCount} expense(s) recorded against it. Financial history is never deleted — ` +
+          'mark the unit unavailable instead.',
       );
     }
 

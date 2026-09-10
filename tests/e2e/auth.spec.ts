@@ -113,10 +113,10 @@ test.describe('Authentication', () => {
 
     // One real user, one real session — and an explicit statement that the
     // not-yet-built sections are not built yet, rather than empty metric cards.
-    // The roadmap panel shrinks as phases ship: Phases 2 and 3 have landed, so
-    // the next unbuilt section named here is Phase 4.
+    // The roadmap panel shrinks as phases ship: Phases 2, 3 and 4 have landed,
+    // so the next unbuilt section named here is Phase 5.
     await expect(page.getByText('People in your organization')).toBeVisible();
-    await expect(page.getByText('Phase 4').first()).toBeVisible();
+    await expect(page.getByText('Phase 5').first()).toBeVisible();
   });
 });
 

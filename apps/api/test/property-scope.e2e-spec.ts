@@ -27,6 +27,9 @@ describe('Property scope (e2e)', () => {
   let assigned: { id: string; name: string };
   let unassigned: { id: string; name: string };
 
+  /** A month the seeded leases (2026-01-01 → 2026-12-31) cover. */
+  const PERIOD = '2026-06';
+
   async function createStaff(role: RoleName, email: string): Promise<SignedIn> {
     const passwordHash = await argon2.hash(STRONG_PASSWORD, {
       type: argon2.argon2id,
@@ -98,6 +101,35 @@ describe('Property scope (e2e)', () => {
     // assertions need a unit that is genuinely available.
     await createUnit(app, owner, assigned.id, { unitNumber: 'ASSIGNED-SPARE' });
     await createUnit(app, owner, unassigned.id, { unitNumber: 'UNASSIGNED-SPARE' });
+
+    // Money in both properties, so a scoped user seeing "some" rather than
+    // "none" is a real result and not an empty database.
+    await authed(app, owner).post('/rent/generate').send({ period: PERIOD }).expect(201);
+    const roll = await authed(app, owner).get('/rent').query({ period: PERIOD, limit: 100 }).expect(200);
+    for (const record of roll.body.data as { id: string; propertyId: string }[]) {
+      await authed(app, owner)
+        .post('/payments')
+        .send({
+          rentRecordId: record.id,
+          amount: '1000.00',
+          paymentDate: '2026-06-05',
+          paymentMethod: 'CASH',
+          reference: `SCOPE-${record.id.slice(-6)}`,
+        })
+        .expect(201);
+    }
+    for (const property of [assigned, unassigned]) {
+      await authed(app, owner)
+        .post('/expenses')
+        .send({
+          propertyId: property.id,
+          category: 'SECURITY',
+          description: `${property.name} guard`,
+          amount: '4000.00',
+          expenseDate: '2026-06-02',
+        })
+        .expect(201);
+    }
   });
 
   it('leaves owners and managers unrestricted', async () => {
@@ -198,6 +230,34 @@ describe('Property scope (e2e)', () => {
       expect(response.body[0].unitNumber).toBe('ASSIGNED-SPARE');
     });
 
+    it('sees only expenses booked to the assigned property', async () => {
+      const response = await authed(app, caretaker).get('/expenses').expect(200);
+      expect(response.body.meta.total).toBe(1);
+      expect(response.body.data[0].property.name).toBe('Assigned Estate');
+      expect(response.body.totalAmount).toBe('4000.00');
+    });
+
+    it('cannot book an expense to a property it is not assigned to', async () => {
+      await authed(app, caretaker)
+        .post('/expenses')
+        .send({
+          propertyId: unassigned.id,
+          category: 'CLEANING',
+          description: 'Out of scope',
+          amount: '500.00',
+          expenseDate: '2026-06-09',
+        })
+        .expect(404);
+    });
+
+    it('cannot see rent or payments at all, whatever its scope', async () => {
+      // Scope narrows what a role can reach; it never grants a permission the
+      // role does not hold.
+      await authed(app, caretaker).get('/rent').expect(403);
+      await authed(app, caretaker).get('/payments').expect(403);
+      await authed(app, caretaker).get('/receipts').expect(403);
+    });
+
     it('can change a unit status inside its scope but not outside it', async () => {
       const mine = await prisma.unit.findFirstOrThrow({
         where: { propertyId: assigned.id, unitNumber: 'ASSIGNED-SPARE' },
@@ -214,6 +274,106 @@ describe('Property scope (e2e)', () => {
         .patch(`/units/${theirs.id}/status`)
         .send({ status: 'MAINTENANCE' })
         .expect(404);
+    });
+  });
+
+  describe('an accountant assigned to one property', () => {
+    let accountant: SignedIn;
+
+    beforeEach(async () => {
+      await createStaff('ACCOUNTANT', 'scoped.accountant@abc.test');
+      await assign('scoped.accountant@abc.test', assigned.id);
+      accountant = await signIn(app, 'scoped.accountant@abc.test', STRONG_PASSWORD);
+    });
+
+    it('sees rent, payments, receipts and expenses for the assigned property only', async () => {
+      const rent = await authed(app, accountant).get('/rent').query({ period: PERIOD }).expect(200);
+      expect(rent.body.meta.total).toBe(1);
+      expect(rent.body.data[0].property.name).toBe('Assigned Estate');
+
+      const payments = await authed(app, accountant).get('/payments').expect(200);
+      expect(payments.body.meta.total).toBe(1);
+      expect(payments.body.totalAmount).toBe('1000.00');
+
+      const receipts = await authed(app, accountant).get('/receipts').expect(200);
+      expect(receipts.body.meta.total).toBe(1);
+
+      const expenses = await authed(app, accountant).get('/expenses').expect(200);
+      expect(expenses.body.meta.total).toBe(1);
+    });
+
+    it('reports summaries covering only the assigned property', async () => {
+      // The dangerous failure for a summary is not a missing row, it is a
+      // total that quietly includes a property the user cannot open.
+      const summary = await authed(app, accountant)
+        .get('/rent/summary')
+        .query({ period: PERIOD })
+        .expect(200);
+      expect(summary.body.recordCount).toBe(1);
+      expect(summary.body.totals.collected).toBe('1000.00');
+
+      const expenses = await authed(app, accountant).get('/expenses/summary').expect(200);
+      expect(expenses.body.total).toBe('4000.00');
+      expect(expenses.body.count).toBe(1);
+    });
+
+    it('gets 404 for a charge, payment, receipt or expense outside its scope', async () => {
+      const charge = await prisma.rentRecord.findFirstOrThrow({
+        where: { propertyId: unassigned.id },
+      });
+      const payment = await prisma.payment.findFirstOrThrow({
+        where: { propertyId: unassigned.id },
+      });
+      const receipt = await prisma.receipt.findFirstOrThrow({
+        where: { propertyId: unassigned.id },
+      });
+      const expense = await prisma.expense.findFirstOrThrow({
+        where: { propertyId: unassigned.id },
+      });
+
+      await authed(app, accountant).get(`/rent/${charge.id}`).expect(404);
+      await authed(app, accountant).get(`/payments/${payment.id}`).expect(404);
+      await authed(app, accountant).get(`/receipts/${receipt.id}`).expect(404);
+      await authed(app, accountant).get(`/expenses/${expense.id}`).expect(404);
+    });
+
+    it('cannot pay a charge outside its scope', async () => {
+      const charge = await prisma.rentRecord.findFirstOrThrow({
+        where: { propertyId: unassigned.id },
+      });
+
+      await authed(app, accountant)
+        .post('/payments')
+        .send({
+          rentRecordId: charge.id,
+          amount: '100.00',
+          paymentDate: '2026-06-06',
+          paymentMethod: 'CASH',
+        })
+        .expect(404);
+    });
+
+    it('cannot widen its scope through a filter', async () => {
+      await authed(app, accountant).get(`/rent?propertyId=${unassigned.id}`).expect(404);
+      await authed(app, accountant).get(`/payments?propertyId=${unassigned.id}`).expect(404);
+      await authed(app, accountant).get(`/receipts?propertyId=${unassigned.id}`).expect(404);
+      await authed(app, accountant).get(`/expenses?propertyId=${unassigned.id}`).expect(404);
+    });
+
+    it('generates rent only for the properties it can see', async () => {
+      // A scoped user pressing "generate" must not create charges for — or
+      // even report a count covering — a property they cannot open.
+      const result = await authed(app, accountant)
+        .post('/rent/generate')
+        .send({ period: '2026-07' })
+        .expect(201);
+
+      expect(result.body.created).toBe(1);
+      const created = await prisma.rentRecord.findMany({
+        where: { periodStart: new Date('2026-07-01') },
+        select: { propertyId: true },
+      });
+      expect(created.map((row) => row.propertyId)).toEqual([assigned.id]);
     });
   });
 
@@ -249,6 +409,10 @@ describe('Property scope (e2e)', () => {
 
     const leases = await authed(app, caretaker).get('/leases').expect(200);
     expect(leases.body.meta.total).toBe(0);
+
+    const expenses = await authed(app, caretaker).get('/expenses').expect(200);
+    expect(expenses.body.meta.total).toBe(0);
+    expect(expenses.body.totalAmount).toBe('0.00');
 
     await authed(app, caretaker).get(`/properties/${assigned.id}`).expect(404);
   });

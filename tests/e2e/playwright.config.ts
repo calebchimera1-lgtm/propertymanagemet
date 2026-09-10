@@ -2,10 +2,15 @@ import { defineConfig, devices } from '@playwright/test';
 
 /**
  * End-to-end tests run against the real web app talking to the real API and a
- * real database. Both servers must already be running:
+ * real database. Both servers must already be running, and the API needs its
+ * registration limiter raised — every spec here creates its own organization,
+ * which the production cap of 5 per hour per IP is designed to stop:
  *
- *   pnpm dev              # or docker compose up
+ *   AUTH_REGISTER_LIMIT=500 AUTH_LOGIN_LIMIT=500 AUTH_SENSITIVE_LIMIT=500 pnpm dev
  *   pnpm test:e2e
+ *
+ * Without that, the suite fails on the sixth registration with a 429 — which is
+ * the limiter working, not a regression.
  *
  * Desktop and mobile are both in the default project list because the mobile
  * layout is designed, not merely narrower — it needs testing as its own thing.

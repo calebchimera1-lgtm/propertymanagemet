@@ -4,15 +4,19 @@ A multi-tenant property management platform for landlords, property owners, prop
 businesses running portfolios of properties, buildings, units, tenants, leases, rent, payments,
 expenses, maintenance, staff and documents.
 
-**Current state: Phase 3 (Tenants & Leases) complete.** On top of the Phase 1 foundation
-(accounts, sessions, roles, permissions, audit trail) and the Phase 2 portfolio (properties,
-buildings, units, property scoping), you can now record tenants, move them into vacant units on a
-lease, renew and end those leases, and track expiry — with the unit's status following the lease
-in the same transaction, and one active lease per unit enforced by the database.
-Rent, payments and reports arrive in Phases 4–6 — see [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) §21.
+**Current state: Phase 4 (Rent, Payments, Receipts & Expenses) complete.** On top of the Phase 1
+foundation (accounts, sessions, roles, permissions, audit trail), the Phase 2 portfolio
+(properties, buildings, units, property scoping) and the Phase 3 occupancy layer (tenants, leases,
+expiry tracking), the product now handles money: generate a month's rent from active leases,
+record payments against those charges in a single locked transaction, issue gapless numbered
+receipts you can print, void a payment without losing the record, and track what each property
+costs to run. Every amount is `Decimal` from the database to the browser — no financial value is
+ever a JavaScript number.
+Maintenance, documents, staff management and reports arrive in Phases 5–6 — see
+[`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) §21.
 
 Phase notes: [`docs/PHASE-1.md`](docs/PHASE-1.md) · [`docs/PHASE-2.md`](docs/PHASE-2.md) ·
-[`docs/PHASE-3.md`](docs/PHASE-3.md)
+[`docs/PHASE-3.md`](docs/PHASE-3.md) · [`docs/PHASE-4.md`](docs/PHASE-4.md)
 
 ---
 
@@ -216,7 +220,7 @@ production). Every endpoint documents its request, response, required permission
 
 ## Security
 
-Implemented in Phase 1 and covered by tests:
+Implemented and covered by tests:
 
 - **Argon2id** password hashing; a dummy verification runs on the unknown-email path so response
   timing cannot be used to discover which addresses are registered
@@ -232,9 +236,16 @@ Implemented in Phase 1 and covered by tests:
 - **Rate limiting** on registration, sign-in and password reset; account lockout after 10 failures
 - **Uniform error envelope** with a request id; no stack traces or driver errors leave the server
 - **Append-only audit log** that redacts anything credential-shaped and never breaks a request
+- **Money is `Decimal` end to end** — `Decimal(14, 2)` in PostgreSQL, `Prisma.Decimal` in the
+  service layer, a fixed-scale string on the wire; no financial value is ever a JavaScript number
+- **Payments are written under a row lock** in one transaction, so two concurrent payments cannot
+  both settle the same balance, and any failure rolls the whole thing back
+- **Financial records are never cascade-deleted** — every money relation is `onDelete: Restrict`,
+  and a unit or property carrying charges refuses deletion with a message naming the counts
 
 The full checklist, including what is deferred to the Phase 7 hardening pass, is in
-[`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) §23.
+[`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) §23; what each phase delivered is in
+[`docs/PHASE-1.md`](docs/PHASE-1.md) through [`docs/PHASE-4.md`](docs/PHASE-4.md).
 
 ## Deployment
 
@@ -262,16 +273,18 @@ the column.
 
 ## What is and is not built yet
 
-**Working now (Phases 1–3):** registration, sign-in/out, sessions and device revocation, password
+**Working now (Phases 1–4):** registration, sign-in/out, sessions and device revocation, password
 change and reset, email verification flow, organization and settings management, the user
 directory, roles and permissions, the app shell and the audit trail; properties, buildings and
 units with full CRUD, archive-vs-delete rules, unit status handling, server-side search,
 filtering, sorting and pagination, and property scoping; tenants with a 360 profile, and the full
-lease lifecycle — create, renew, terminate — with expiry tracking and one active lease per unit.
+lease lifecycle — create, renew, terminate — with expiry tracking and one active lease per unit;
+monthly rent generation, payments recorded in a single locked transaction, gapless numbered
+receipts with a print view, payment voiding that reverses without deleting, and expense tracking
+by category.
 
-**Deliberately not built yet:** rent, payments, receipts, expenses, maintenance, staff management,
-documents, notifications, dashboard metrics and reports. They are specified in the blueprint and
-scheduled in Phases 4–6.
+**Deliberately not built yet:** maintenance requests, staff management, documents, notifications,
+dashboard metrics and reports. They are specified in the blueprint and scheduled in Phases 5–6.
 
 **Honest gaps in what is built:**
 
@@ -282,9 +295,18 @@ scheduled in Phases 4–6.
 - **Staff assignments have no UI yet.** Property scoping is fully enforced and tested, but the
   screens for creating staff and granting them properties are the Phase 5 StaffModule. Today
   assignments come from the seed or the database directly.
-- **No money yet.** The tenant profile and lease detail name rent and payments as arriving in
-  Phase 4 rather than showing a zero balance, which would read as "nothing owed".
+- **No M-Pesa integration.** M-Pesa payment references are typed by hand, and the payment dialog
+  says so. Nothing is fetched from Safaricom, and no reconciliation is automatic.
+- **No credit balances.** A payment larger than the outstanding balance is refused with a 422
+  naming the amount owing, rather than absorbed as credit — carrying credit forward has real rules
+  (rollover, refund on move-out) that belong in a version that implements them properly.
+- **No receipt email or PDF export.** A receipt prints from the browser; the printed page is the
+  receipt and none of the app around it.
+- **No late fees, pro-rata or profit-and-loss report.** Rent is billed in whole months, `OVERDUE`
+  is reported but never charged for, and the reporting module — which is where net income belongs
+  — is Phase 6.
 - **Deposits are recorded, not ledgered.** `depositPaid` is tracked and capped at the security
-  deposit; deductions and move-out refunds are out of V1 scope.
+  deposit; deductions and move-out refunds are out of V1 scope, and no rent payment is ever taken
+  from a deposit.
 - **Password strength** is a policy check plus a small common-password blocklist, not full
   dictionary scoring. Deferred to Phase 7.

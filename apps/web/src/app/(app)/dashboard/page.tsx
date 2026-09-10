@@ -17,13 +17,22 @@ import { queryKeys } from '@/lib/query-client';
 import { formatDateTime } from '@/lib/utils';
 
 /**
- * Phase 1 dashboard.
+ * The dashboard, as far as it honestly goes.
  *
- * Every figure here is read from the API. There are no portfolio metrics yet
- * because there are no properties yet — showing an occupancy rate of 0% over an
- * empty database would be a made-up number dressed as a real one. The metric
- * cards and charts arrive in Phase 6, on top of Phase 2-5 data.
+ * Every figure here is read from the API. The portfolio and money metrics —
+ * occupancy, collection rate, income against expenses — and the charts that go
+ * with them are Phase 6 work, built on one reporting service so two tiles
+ * cannot disagree. Until that exists this screen shows what it can verify and
+ * links to the screens that hold the rest, rather than inventing a number.
  */
+/** Kept beside UPCOMING_SECTIONS so the two halves of the panel stay honest. */
+const DELIVERED_SECTIONS = [
+  'Accounts, sessions and permissions',
+  'Properties, buildings and units',
+  'Tenants and leases',
+  'Rent, payments, receipts and expenses',
+];
+
 export default function DashboardPage() {
   const { me, can } = useSession();
 
@@ -104,20 +113,25 @@ export default function DashboardPage() {
         <CardHeader>
           <CardTitle>What is available so far</CardTitle>
           <CardDescription>
-            Phase 1 delivers the foundation: accounts, organizations, sessions, roles and
-            permissions. The sections below are built in later phases and are not shown in the
-            navigation until they work.
+            Accounts and permissions, the property portfolio, tenants and leases, and rent,
+            payments, receipts and expenses all work today. The sections below are built in later
+            phases and are not shown in the navigation until they do.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <ul className="grid gap-3 sm:grid-cols-2">
-            <li className="flex items-start gap-3 rounded-md border bg-background p-3">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
-              <div>
-                <p className="text-sm font-medium">Accounts, sessions and permissions</p>
-                <p className="text-xs text-muted-foreground">Available now</p>
-              </div>
-            </li>
+            {DELIVERED_SECTIONS.map((label) => (
+              <li
+                key={label}
+                className="flex items-start gap-3 rounded-md border bg-background p-3"
+              >
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{label}</p>
+                  <p className="text-xs text-muted-foreground">Available now</p>
+                </div>
+              </li>
+            ))}
             {UPCOMING_SECTIONS.map((section) => (
               <li
                 key={section.label}

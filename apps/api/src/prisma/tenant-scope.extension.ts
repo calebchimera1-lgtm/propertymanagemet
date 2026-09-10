@@ -21,6 +21,11 @@ export const TENANT_SCOPED_MODELS = new Set<string>([
   'StaffAssignment',
   'Tenant',
   'Lease',
+  'RentRecord',
+  'Payment',
+  'Receipt',
+  'Expense',
+  'NumberSequence',
 ]);
 
 const WHERE_OPERATIONS = new Set([

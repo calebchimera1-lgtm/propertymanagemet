@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { PrismaClient } from '@pm/database';
 import { seedPermissionsAndRoles } from './permissions';
 import { seedDemoData } from './demo';
+import { seedFinance } from './finance';
 import { seedOccupancy } from './occupancy';
 import { seedPortfolio } from './portfolio';
 
@@ -35,6 +36,9 @@ async function main(): Promise<void> {
 
       console.log('\nSeeding demo tenants and leases...');
       await seedOccupancy(prisma);
+
+      console.log('\nSeeding demo rent, payments and expenses...');
+      await seedFinance(prisma);
     } else {
       console.log('\nSkipping demo data. Pass --demo to include it.');
     }

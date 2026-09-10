@@ -13,8 +13,8 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 /**
- * Shared shell for the three portfolio forms so they cannot drift apart in
- * layout, button order or how a form-level error is shown.
+ * Shared shell for every form dialog in the product so they cannot drift apart
+ * in layout, button order or how a form-level error is shown.
  */
 export function FormDialog({
   open,
@@ -24,6 +24,7 @@ export function FormDialog({
   formError,
   submitting,
   submitLabel,
+  destructive = false,
   onSubmit,
   children,
 }: {
@@ -34,6 +35,8 @@ export function FormDialog({
   formError?: string | null;
   submitting: boolean;
   submitLabel: string;
+  /** Colours the confirm button red for reversals and deletions. */
+  destructive?: boolean;
   onSubmit: React.FormEventHandler<HTMLFormElement>;
   children: React.ReactNode;
 }) {
@@ -63,7 +66,7 @@ export function FormDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" loading={submitting}>
+            <Button type="submit" variant={destructive ? 'destructive' : 'default'} loading={submitting}>
               {submitLabel}
             </Button>
           </DialogFooter>

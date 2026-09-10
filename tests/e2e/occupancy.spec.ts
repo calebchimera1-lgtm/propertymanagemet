@@ -196,14 +196,14 @@ test.describe('Occupancy', () => {
     await expect(page.getByText(/cannot be deleted. Deactivate them instead/)).toBeVisible();
   });
 
-  test('the tenant profile names the finance section as not built rather than showing zeroes', async ({
-    page,
-  }) => {
+  test('a tenant with no charges says so rather than showing a zero balance', async ({ page }) => {
     await signUp(page, unique('Honest'));
     await addTenant(page, 'Honest Tenant');
 
     await page.goto('/tenants');
     await row(page, 'Honest Tenant').first().click();
-    await expect(page.getByText('Rent and payments arrive in Phase 4.')).toBeVisible();
+    // "Outstanding: KES 0.00" on a tenant who has never been billed reads as
+    // "owes nothing", which is a different claim from "was never charged".
+    await expect(page.getByText(/No rent has been charged to this tenant yet/)).toBeVisible();
   });
 });

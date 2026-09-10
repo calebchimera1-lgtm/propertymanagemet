@@ -4,6 +4,24 @@ import { Prisma } from '@pm/database';
 export const MONEY_SCALE = 2;
 
 /**
+ * An amount as it arrives on the wire: a plain decimal string, at most two
+ * decimal places, no sign and no separators. Zero is allowed — a deposit of
+ * nothing is a real thing to record.
+ */
+export const MONEY_PATTERN = /^\d{1,12}(\.\d{1,2})?$/;
+
+/**
+ * The same, but strictly above zero.
+ *
+ * Payments and expenses carry a `CHECK (amount > 0)` in the database. Without
+ * this pattern in front of it, "0.00" passes validation and the constraint
+ * fires instead — and a constraint violation surfaces as a 500 saying
+ * "something went wrong on our side", which is both untrue and unhelpful.
+ * Rejecting it here turns the same rule into a field error on the amount box.
+ */
+export const POSITIVE_MONEY_PATTERN = /^(?!0+(\.0{1,2})?$)\d{1,12}(\.\d{1,2})?$/;
+
+/**
  * The one way money leaves the API.
  *
  * `Decimal.toString()` drops trailing zeros — 65000.00 becomes "65000" — which

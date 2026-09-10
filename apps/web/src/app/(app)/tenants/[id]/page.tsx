@@ -17,6 +17,11 @@ import { useSession } from '@/features/auth/use-session';
 import { LeaseFormDialog } from '@/features/occupancy/components/lease-form-dialog';
 import { TenantFormDialog } from '@/features/occupancy/components/tenant-form-dialog';
 import {
+  PAYMENT_METHOD_LABELS,
+  RENT_STATUS_LABELS,
+  RENT_STATUS_VARIANTS,
+} from '@/features/finance/labels';
+import {
   ID_TYPE_LABELS,
   LEASE_STATUS_LABELS,
   LEASE_STATUS_VARIANTS,
@@ -54,7 +59,8 @@ export default function TenantProfilePage() {
     );
   }
 
-  const { tenant, currentLease, leaseHistory, finances } = profile.data;
+  const { tenant, currentLease, leaseHistory, finances, rentHistory, recentPayments } =
+    profile.data;
   const currency = me?.organization.currency ?? 'KES';
 
   return (
@@ -109,6 +115,7 @@ export default function TenantProfilePage() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="lease">Current lease</TabsTrigger>
+          <TabsTrigger value="rent">Rent &amp; payments</TabsTrigger>
           <TabsTrigger value="history">Lease history</TabsTrigger>
         </TabsList>
 
@@ -151,14 +158,45 @@ export default function TenantProfilePage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Finances</CardTitle>
-                <CardDescription>Rent charged, paid and outstanding.</CardDescription>
+                <CardDescription>
+                  Every charge this tenant has ever had, not just this month.
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                {/* Deliberately not a row of zeroes: an unbuilt section must not
-                    look like "nothing owed". */}
-                <Alert variant="info">
-                  <AlertDescription>{finances.reason}</AlertDescription>
-                </Alert>
+                {finances.chargeCount === 0 ? (
+                  <Alert variant="info">
+                    <AlertDescription>
+                      No rent has been charged to this tenant yet. Charges appear once rent is
+                      generated for a period their lease covers.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <>
+                    <dl className="grid gap-4 sm:grid-cols-2">
+                      <Detail
+                        label="Charged to date"
+                        value={formatMoney(finances.totalCharged, currency)}
+                      />
+                      <Detail label="Paid" value={formatMoney(finances.totalPaid, currency)} />
+                      <Detail
+                        label="Outstanding"
+                        value={formatMoney(finances.outstanding, currency)}
+                      />
+                      <Detail
+                        label="Collection rate"
+                        value={`${finances.collectionRate}% over ${finances.chargeCount} charge${finances.chargeCount === 1 ? '' : 's'}`}
+                      />
+                    </dl>
+                    {finances.overdueCount > 0 ? (
+                      <Alert variant="warning" className="mt-4">
+                        <AlertDescription>
+                          {formatMoney(finances.overdue, currency)} is past its due date across{' '}
+                          {finances.overdueCount} charge{finances.overdueCount === 1 ? '' : 's'}.
+                        </AlertDescription>
+                      </Alert>
+                    ) : null}
+                  </>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -208,6 +246,86 @@ export default function TenantProfilePage() {
               }
             />
           )}
+        </TabsContent>
+
+        <TabsContent value="rent">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Rent charges</CardTitle>
+                <CardDescription>Most recent first, up to twelve months.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {rentHistory.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No charges yet.</p>
+                ) : (
+                  <ul className="divide-y text-sm">
+                    {rentHistory.map((record) => (
+                      <li key={record.id} className="flex items-center justify-between gap-4 py-3">
+                        <div className="min-w-0">
+                          <div className="font-medium">{record.periodLabel}</div>
+                          <div className="text-xs text-muted-foreground">
+                            Unit {record.unit.unitNumber} · due {formatDate(record.dueDate)}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="tabular-nums">
+                            {formatMoney(record.paidAmount, currency)} of{' '}
+                            {formatMoney(record.expectedAmount, currency)}
+                          </div>
+                          <Badge
+                            variant={RENT_STATUS_VARIANTS[record.status]}
+                            className="mt-1"
+                          >
+                            {RENT_STATUS_LABELS[record.status]}
+                          </Badge>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Recent payments</CardTitle>
+                <CardDescription>
+                  The last ten payments. Voided payments are not counted.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {recentPayments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nothing paid yet.</p>
+                ) : (
+                  <ul className="divide-y text-sm">
+                    {recentPayments.map((payment) => (
+                      <li key={payment.id} className="flex items-center justify-between gap-4 py-3">
+                        <div className="min-w-0">
+                          <div className="font-medium tabular-nums">
+                            {formatMoney(payment.amount, currency)}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {formatDate(payment.paymentDate)} ·{' '}
+                            {PAYMENT_METHOD_LABELS[payment.paymentMethod]}
+                            {payment.periodLabel ? ` · ${payment.periodLabel}` : ''}
+                          </div>
+                        </div>
+                        {payment.receipt && can('receipts.view') ? (
+                          <Link
+                            href={`/receipts/${payment.receipt.id}`}
+                            className="shrink-0 font-mono text-xs text-primary hover:underline"
+                          >
+                            {payment.receipt.receiptNumber}
+                          </Link>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="history">

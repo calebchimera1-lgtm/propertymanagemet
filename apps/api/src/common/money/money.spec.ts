@@ -1,5 +1,5 @@
 import { Prisma } from '@pm/database';
-import { serialiseMoney, toDecimal } from './money';
+import { MONEY_PATTERN, POSITIVE_MONEY_PATTERN, serialiseMoney, toDecimal } from './money';
 
 describe('money serialisation', () => {
   it('always carries two decimal places', () => {
@@ -32,5 +32,34 @@ describe('money serialisation', () => {
     const rent = toDecimal('30000.00');
     const paid = toDecimal('20000.00');
     expect(serialiseMoney(rent.minus(paid))).toBe('10000.00');
+  });
+});
+
+describe('money patterns', () => {
+  it('accepts the shapes a form can produce', () => {
+    for (const value of ['0', '0.00', '30000', '30000.5', '30000.50', '999999999999.99']) {
+      expect(MONEY_PATTERN.test(value)).toBe(true);
+    }
+  });
+
+  it('rejects anything that is not a plain positive decimal', () => {
+    for (const value of ['', '-1', '1.005', '1,000', '1e3', '30000.', 'abc', ' 30000']) {
+      expect(MONEY_PATTERN.test(value)).toBe(false);
+    }
+  });
+
+  it('rejects every spelling of zero where an amount must be above zero', () => {
+    // A payment or expense of nothing is not a rounding question, it is a
+    // mistake — and it must be caught as a field error, not by a CHECK
+    // constraint that surfaces as a server error.
+    for (const value of ['0', '0.0', '0.00', '00', '000.00']) {
+      expect(POSITIVE_MONEY_PATTERN.test(value)).toBe(false);
+    }
+  });
+
+  it('still accepts the smallest real amount', () => {
+    expect(POSITIVE_MONEY_PATTERN.test('0.01')).toBe(true);
+    expect(POSITIVE_MONEY_PATTERN.test('0.10')).toBe(true);
+    expect(POSITIVE_MONEY_PATTERN.test('12500.00')).toBe(true);
   });
 });

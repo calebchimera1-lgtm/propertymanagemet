@@ -12,7 +12,7 @@ export function Topbar() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:px-6">
+    <header className="no-print sticky top-0 z-40 flex h-16 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:px-6">
       {/* Mobile navigation is a slide-over panel, not a squeezed sidebar. */}
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
         <SheetTrigger asChild>

@@ -90,7 +90,7 @@ export class CreateLeaseDto {
  * What is NOT updatable, and why: tenantId, unitId, propertyId and startDate.
  *
  * Changing who or where a lease is for silently rewrites history — and from
- * Phase 4, rewrites what past rent records were billed against. Terminate the
+ * rewrites what past rent records were billed against. Terminate the
  * lease and create a new one instead; that leaves an honest trail.
  */
 export class UpdateLeaseDto {

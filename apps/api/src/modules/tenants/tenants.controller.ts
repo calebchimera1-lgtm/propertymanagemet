@@ -55,7 +55,7 @@ export class TenantsController {
   @ApiOperation({
     summary: 'Tenant 360 profile',
     description:
-      'Details, current lease and full lease history. Rent, payments and balance arrive in Phase 4; the response reports their absence rather than returning zeroes.',
+      'Details, current lease, full lease history, rent charged and paid to date, and the most recent payments.',
   })
   profile(@Param('id') id: string) {
     return this.tenants.profile(id);

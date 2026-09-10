@@ -385,7 +385,7 @@ export class LeasesService {
    *
    * The lease closes and the unit is freed in one transaction. The lease is
    * never deleted: it is the record of who lived there and on what terms, and
-   * from Phase 4 it is what past rent records were billed against.
+   * it is also what past rent records were billed against.
    */
   async terminate(id: string, dto: TerminateLeaseDto) {
     const auth = this.tenant.getOrThrow();

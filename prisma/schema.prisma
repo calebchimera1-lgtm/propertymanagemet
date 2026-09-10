@@ -6,7 +6,8 @@
 // Phase 2 adds the portfolio: properties, buildings, units and the staff
 // assignments that scope a caretaker or accountant to particular properties.
 // Phase 3 adds occupancy: tenants and the leases that put them in units.
-// Money and operations arrive in Phases 4–5 as designed in docs/BLUEPRINT.md.
+// Phase 4 adds the money: rent records, payments, receipts and expenses.
+// Operations arrive in Phase 5 as designed in docs/BLUEPRINT.md.
 //
 // Conventions (blueprint §7):
 //   • ids are cuid strings — opaque, non-enumerable, safe in URLs
@@ -97,6 +98,44 @@ enum LeaseStatus {
   TERMINATED
 }
 
+enum RentStatus {
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  /// Derived from the due date, never hand-set.
+  OVERDUE
+}
+
+enum PaymentMethod {
+  MPESA
+  BANK
+  CASH
+  CHEQUE
+  OTHER
+}
+
+enum PaymentStatus {
+  COMPLETED
+  /// Payments are append-only: a mistake is voided, never edited or deleted.
+  VOIDED
+}
+
+enum ExpenseCategory {
+  MAINTENANCE
+  REPAIRS
+  SECURITY
+  CLEANING
+  WATER
+  ELECTRICITY
+  GARBAGE
+  SALARIES
+  INSURANCE
+  TAXES
+  MANAGEMENT
+  CONSTRUCTION
+  OTHER
+}
+
 enum UnitStatus {
   VACANT
   OCCUPIED
@@ -148,6 +187,11 @@ model Organization {
   staffAssignments StaffAssignment[]
   tenants          Tenant[]
   leases           Lease[]
+  rentRecords      RentRecord[]
+  payments         Payment[]
+  receipts         Receipt[]
+  expenses         Expense[]
+  numberSequences  NumberSequence[]
 
   /// Referenced by the composite foreign keys below. Every child row carries
   /// organizationId as part of its foreign key, so a unit cannot point at a
@@ -403,6 +447,10 @@ model Property {
   units            Unit[]
   staffAssignments StaffAssignment[]
   leases           Lease[]
+  rentRecords      RentRecord[]
+  payments         Payment[]
+  receipts         Receipt[]
+  expenses         Expense[]
 
   @@unique([organizationId, id])
   @@unique([organizationId, name])
@@ -430,6 +478,9 @@ model Building {
   property     Property     @relation(fields: [organizationId, propertyId], references: [organizationId, id], onDelete: Restrict)
   units        Unit[]
   leases       Lease[]
+  rentRecords  RentRecord[]
+  payments     Payment[]
+  expenses     Expense[]
 
   @@unique([organizationId, id])
   @@unique([propertyId, name])
@@ -468,6 +519,10 @@ model Unit {
   /// units to the property first, in one transaction — see BuildingsService.
   building     Building?    @relation(fields: [organizationId, buildingId], references: [organizationId, id], onDelete: Restrict)
   leases       Lease[]
+  rentRecords  RentRecord[]
+  payments     Payment[]
+  receipts     Receipt[]
+  expenses     Expense[]
 
   @@unique([organizationId, id])
   @@index([organizationId])
@@ -530,6 +585,9 @@ model Tenant {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   leases       Lease[]
+  rentRecords  RentRecord[]
+  payments     Payment[]
+  receipts     Receipt[]
 
   @@unique([organizationId, id])
   @@index([organizationId])
@@ -577,6 +635,8 @@ model Lease {
   property     Property     @relation(fields: [organizationId, propertyId], references: [organizationId, id], onDelete: Restrict)
   building     Building?    @relation(fields: [organizationId, buildingId], references: [organizationId, id], onDelete: Restrict)
   unit         Unit         @relation(fields: [organizationId, unitId], references: [organizationId, id], onDelete: Restrict)
+  rentRecords  RentRecord[]
+  payments     Payment[]
 
   @@unique([organizationId, id])
   @@index([organizationId])
@@ -585,4 +645,201 @@ model Lease {
   @@index([organizationId, tenantId])
   @@index([organizationId, unitId])
   @@index([organizationId, propertyId])
+}
+
+// ── Money (Phase 4) ──────────────────────────────────────────────────────────
+
+/// One month's rent charge for one lease.
+///
+/// `expectedAmount` is copied from the lease at generation, not read through it:
+/// a rent review must not silently rewrite what past months were billed at.
+///
+/// `paidAmount` and `balance` are stored so "who owes money" is an indexed
+/// query rather than an aggregate over every payment ever made. They are
+/// derived values with one writer — the payment service, inside a transaction —
+/// and a reconciliation test asserts across the whole database that
+/// paidAmount == SUM(completed payments) and balance == expected - paid.
+model RentRecord {
+  id             String     @id @default(cuid())
+  organizationId String
+  leaseId        String
+  tenantId       String
+  propertyId     String
+  buildingId     String?
+  unitId         String
+  /// First day of the rental month, at UTC midnight.
+  periodStart    DateTime   @db.Date
+  periodEnd      DateTime   @db.Date
+  /// "2026-09". Human-facing and stable for grouping.
+  periodLabel    String
+  expectedAmount Decimal    @db.Decimal(14, 2)
+  paidAmount     Decimal    @default(0) @db.Decimal(14, 2)
+  balance        Decimal    @db.Decimal(14, 2)
+  dueDate        DateTime   @db.Date
+  status         RentStatus @default(PENDING)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  lease        Lease        @relation(fields: [organizationId, leaseId], references: [organizationId, id], onDelete: Restrict)
+  tenant       Tenant       @relation(fields: [organizationId, tenantId], references: [organizationId, id], onDelete: Restrict)
+  property     Property     @relation(fields: [organizationId, propertyId], references: [organizationId, id], onDelete: Restrict)
+  building     Building?    @relation(fields: [organizationId, buildingId], references: [organizationId, id], onDelete: Restrict)
+  unit         Unit         @relation(fields: [organizationId, unitId], references: [organizationId, id], onDelete: Restrict)
+  payments     Payment[]
+
+  /// The constraint that makes double-billing impossible. A cron re-run, a
+  /// double click and a container restart mid-job all collapse into one row.
+  @@unique([leaseId, periodStart])
+  @@unique([organizationId, id])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, dueDate])
+  @@index([organizationId, periodLabel])
+  @@index([organizationId, tenantId])
+  @@index([organizationId, propertyId])
+  @@index([organizationId, leaseId, periodStart])
+}
+
+/// Money received. Append-only.
+///
+/// There is no `updatedAt` because there is no edit path: a mistake is voided
+/// (audited, reverses the rent balance in a transaction) and re-recorded. An
+/// editable payment is an unauditable one.
+model Payment {
+  id             String        @id @default(cuid())
+  organizationId String
+  tenantId       String
+  propertyId     String
+  buildingId     String?
+  unitId         String
+  leaseId        String
+  /// Required in Version 1: every payment is against a specific month's charge,
+  /// which is what makes the reconciliation invariant meaningful. Deposits are
+  /// recorded on the lease (Lease.depositPaid), not as payments.
+  rentRecordId   String
+  amount         Decimal       @db.Decimal(14, 2)
+  paymentDate    DateTime      @db.Date
+  paymentMethod  PaymentMethod
+  /// M-Pesa code, bank slip number, cheque number. Unique per organization and
+  /// method when present, so the same transaction cannot be banked twice.
+  reference      String?
+  periodLabel    String?
+  notes          String?
+  status         PaymentStatus @default(COMPLETED)
+  /// Set on creation from the request header, so a retried request replays the
+  /// original response instead of taking the money twice.
+  idempotencyKey String?
+  recordedById   String?
+  voidedById     String?
+  voidedAt       DateTime?
+  voidReason     String?
+  createdAt      DateTime      @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  lease        Lease        @relation(fields: [organizationId, leaseId], references: [organizationId, id], onDelete: Restrict)
+  rentRecord   RentRecord   @relation(fields: [organizationId, rentRecordId], references: [organizationId, id], onDelete: Restrict)
+  tenant       Tenant       @relation(fields: [organizationId, tenantId], references: [organizationId, id], onDelete: Restrict)
+  property     Property     @relation(fields: [organizationId, propertyId], references: [organizationId, id], onDelete: Restrict)
+  building     Building?    @relation(fields: [organizationId, buildingId], references: [organizationId, id], onDelete: Restrict)
+  unit         Unit         @relation(fields: [organizationId, unitId], references: [organizationId, id], onDelete: Restrict)
+  receipt      Receipt?
+
+  @@unique([organizationId, id])
+  @@index([organizationId])
+  @@index([organizationId, paymentDate])
+  @@index([organizationId, status])
+  @@index([organizationId, tenantId])
+  @@index([organizationId, propertyId])
+  @@index([organizationId, rentRecordId])
+  @@index([organizationId, paymentMethod])
+}
+
+/// Proof of payment. Immutable, and numbered without gaps.
+///
+/// Voiding a payment marks its receipt void; the number is retained and never
+/// reused, because a missing number in a receipt book is what an auditor asks
+/// about.
+model Receipt {
+  id             String        @id @default(cuid())
+  organizationId String
+  paymentId      String        @unique
+  /// RCP-ABC-2026-000001
+  receiptNumber  String
+  tenantId       String
+  propertyId     String
+  unitId         String
+  amount         Decimal       @db.Decimal(14, 2)
+  paymentMethod  PaymentMethod
+  reference      String?
+  paymentDate    DateTime      @db.Date
+  periodLabel    String?
+  issuedById     String?
+  voidedAt       DateTime?
+  createdAt      DateTime      @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  payment      Payment      @relation(fields: [organizationId, paymentId], references: [organizationId, id], onDelete: Restrict)
+  tenant       Tenant       @relation(fields: [organizationId, tenantId], references: [organizationId, id], onDelete: Restrict)
+  property     Property     @relation(fields: [organizationId, propertyId], references: [organizationId, id], onDelete: Restrict)
+  unit         Unit         @relation(fields: [organizationId, unitId], references: [organizationId, id], onDelete: Restrict)
+
+  @@unique([organizationId, receiptNumber])
+  @@unique([organizationId, id])
+  /// One receipt per payment, and the composite key keeps the pair inside one
+  /// organization — the one-to-one needs the unique on the defining side.
+  @@unique([organizationId, paymentId])
+  @@index([organizationId])
+  @@index([organizationId, paymentDate])
+  @@index([organizationId, tenantId])
+}
+
+/// Money spent on a property. Feeds the profit and loss report in Phase 6.
+model Expense {
+  id             String          @id @default(cuid())
+  organizationId String
+  propertyId     String
+  buildingId     String?
+  unitId         String?
+  category       ExpenseCategory
+  description    String
+  amount         Decimal         @db.Decimal(14, 2)
+  expenseDate    DateTime        @db.Date
+  paymentMethod  PaymentMethod?
+  vendor         String?
+  reference      String?
+  createdById    String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  property     Property     @relation(fields: [organizationId, propertyId], references: [organizationId, id], onDelete: Restrict)
+  building     Building?    @relation(fields: [organizationId, buildingId], references: [organizationId, id], onDelete: Restrict)
+  unit         Unit?        @relation(fields: [organizationId, unitId], references: [organizationId, id], onDelete: Restrict)
+
+  @@unique([organizationId, id])
+  @@index([organizationId])
+  @@index([organizationId, expenseDate])
+  @@index([organizationId, category])
+  @@index([organizationId, propertyId])
+}
+
+/// Gapless per-organization counters.
+///
+/// A Postgres sequence would be simpler but leaks gaps on rollback and is
+/// shared across tenants. This row is locked FOR UPDATE inside the payment
+/// transaction, so a rolled-back payment takes its receipt number with it.
+model NumberSequence {
+  id             String   @id @default(cuid())
+  organizationId String
+  /// "RECEIPT"
+  key            String
+  year           Int
+  lastValue      Int      @default(0)
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, key, year])
+  @@index([organizationId])
 }

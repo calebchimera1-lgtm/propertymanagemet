@@ -80,7 +80,7 @@ export function SidebarNav({ onNavigate }: SidebarProps) {
 /** Fixed sidebar for desktop. On mobile the same nav renders inside a sheet. */
 export function Sidebar() {
   return (
-    <aside className="hidden w-64 shrink-0 border-r bg-card px-3 py-4 lg:block">
+    <aside className="no-print hidden w-64 shrink-0 border-r bg-card px-3 py-4 lg:block">
       <SidebarNav />
     </aside>
   );

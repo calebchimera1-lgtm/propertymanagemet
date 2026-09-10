@@ -117,7 +117,7 @@ describe('Occupancy (e2e)', () => {
       await authed(app, owner).get(`/tenants/${tenant.id}`).expect(404);
     });
 
-    it('builds a 360 profile that names what is not built yet', async () => {
+    it('builds a 360 profile covering the lease and the money', async () => {
       const unit = await createUnit(app, owner, propertyId);
       const tenant = await createTenant(app, owner);
       await createLease(app, owner, { tenantId: tenant.id, unitId: unit.id });
@@ -126,9 +126,47 @@ describe('Occupancy (e2e)', () => {
 
       expect(response.body.currentLease).not.toBeNull();
       expect(response.body.leaseHistory).toHaveLength(1);
-      // Not an empty array or a zero balance, which would read as "nothing owed".
-      expect(response.body.finances.available).toBe(false);
-      expect(response.body.finances.reason).toMatch(/Phase 4/);
+
+      // A tenant who has never been billed reports chargeCount 0, so the UI can
+      // say "not charged yet" instead of a zero balance that reads as "owes
+      // nothing" — a different claim entirely.
+      expect(response.body.finances.chargeCount).toBe(0);
+      expect(response.body.finances.outstanding).toBe('0.00');
+      expect(response.body.rentHistory).toEqual([]);
+      expect(response.body.recentPayments).toEqual([]);
+    });
+
+    it('reports the money once the tenant has been charged and has paid', async () => {
+      const unit = await createUnit(app, owner, propertyId, { monthlyRent: '30000.00' });
+      const tenant = await createTenant(app, owner);
+      await createLease(app, owner, {
+        tenantId: tenant.id,
+        unitId: unit.id,
+        monthlyRent: '30000.00',
+      });
+
+      await authed(app, owner).post('/rent/generate').send({ period: '2026-06' }).expect(201);
+      const roll = await authed(app, owner).get('/rent').query({ period: '2026-06' }).expect(200);
+      await authed(app, owner)
+        .post('/payments')
+        .send({
+          rentRecordId: roll.body.data[0].id,
+          amount: '18000.00',
+          paymentDate: '2026-06-05',
+          paymentMethod: 'MPESA',
+          reference: 'PROFILE-1',
+        })
+        .expect(201);
+
+      const response = await authed(app, owner).get(`/tenants/${tenant.id}/profile`).expect(200);
+
+      expect(response.body.finances.totalCharged).toBe('30000.00');
+      expect(response.body.finances.totalPaid).toBe('18000.00');
+      expect(response.body.finances.outstanding).toBe('12000.00');
+      expect(response.body.finances.collectionRate).toBe(60);
+      expect(response.body.rentHistory).toHaveLength(1);
+      expect(response.body.recentPayments).toHaveLength(1);
+      expect(response.body.recentPayments[0].receipt.receiptNumber).toMatch(/-000001$/);
     });
   });
 

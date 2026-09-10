@@ -62,12 +62,51 @@ export interface Lease {
   property: Ref;
 }
 
+/** Money arrives as fixed-scale decimal strings; nothing here does arithmetic. */
+export interface TenantFinances {
+  available: boolean;
+  totalCharged: string;
+  totalPaid: string;
+  outstanding: string;
+  overdue: string;
+  overdueCount: number;
+  collectionRate: number;
+  chargeCount: number;
+}
+
+export interface TenantRentHistoryEntry {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  periodLabel: string;
+  expectedAmount: string;
+  paidAmount: string;
+  balance: string;
+  dueDate: string;
+  status: 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE';
+  unit: { id: string; unitNumber: string };
+  property: { id: string; name: string };
+}
+
+export interface TenantPaymentEntry {
+  id: string;
+  amount: string;
+  paymentDate: string;
+  paymentMethod: 'MPESA' | 'BANK' | 'CASH' | 'CHEQUE' | 'OTHER';
+  reference: string | null;
+  periodLabel: string | null;
+  createdAt: string;
+  receipt: { id: string; receiptNumber: string; voidedAt: string | null } | null;
+}
+
 export interface TenantProfile {
   tenant: Tenant;
   currentLease: LeaseHistoryEntry | null;
   leaseHistory: LeaseHistoryEntry[];
   leaseCount: number;
-  finances: { available: boolean; reason: string };
+  finances: TenantFinances;
+  rentHistory: TenantRentHistoryEntry[];
+  recentPayments: TenantPaymentEntry[];
 }
 
 export interface LeaseHistoryEntry {

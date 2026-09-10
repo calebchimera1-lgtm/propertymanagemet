@@ -4,6 +4,8 @@ import { paginated } from '@/common/dto/pagination.dto';
 import { ConflictError, NotFoundError } from '@/common/errors/domain.errors';
 import { serialiseMoney } from '@/common/money/money';
 import { AUDIT_ACTIONS, AuditLogService } from '@/modules/audit-logs/audit-log.service';
+import { todayUtc } from '@/modules/leases/lease-dates';
+import { FinanceCalculationService } from '@/modules/rent/finance-calculation.service';
 import { InjectScopedPrisma } from '@/prisma/prisma.module';
 import type { ScopedPrismaClient } from '@/prisma/tenant-scope.extension';
 import { PropertyScopeService } from '@/tenancy/property-scope.service';
@@ -38,6 +40,7 @@ export class TenantsService {
     private readonly scope: PropertyScopeService,
     private readonly tenant: TenantContextService,
     private readonly audit: AuditLogService,
+    private readonly finance: FinanceCalculationService,
   ) {}
 
   /**
@@ -133,12 +136,12 @@ export class TenantsService {
   }
 
   /**
-   * The tenant 360 view: who they are, where they live, and what has happened.
+   * The tenant 360 view: who they are, where they live, what they have been
+   * charged, and what they have paid.
    *
-   * Rent, payments and outstanding balance are the obvious next sections and
-   * are deliberately absent — they arrive with the money models in Phase 4.
-   * The response says so explicitly rather than returning empty arrays that
-   * look like "nothing owed".
+   * The money figures are the tenant's whole history, not one month: a tenant
+   * who cleared September but still owes for July has an outstanding balance,
+   * and a profile that showed only the current period would hide it.
    */
   async profile(id: string) {
     const tenant = await this.findOne(id);
@@ -175,14 +178,78 @@ export class TenantsService {
       (LIVE_LEASE_STATUSES as readonly string[]).includes(lease.status),
     );
 
+    const [rentRecords, payments] = await Promise.all([
+      this.db.rentRecord.findMany({
+        where: { tenantId: id },
+        orderBy: [{ periodStart: 'desc' }],
+        select: {
+          id: true,
+          periodStart: true,
+          periodEnd: true,
+          periodLabel: true,
+          expectedAmount: true,
+          paidAmount: true,
+          balance: true,
+          dueDate: true,
+          status: true,
+          unit: { select: { id: true, unitNumber: true } },
+          property: { select: { id: true, name: true } },
+        },
+      }),
+      this.db.payment.findMany({
+        // Voided payments are excluded: the money was reversed, so counting it
+        // here would show a tenant as having paid what they have not.
+        where: { tenantId: id, status: 'COMPLETED' },
+        orderBy: [{ paymentDate: 'desc' }, { createdAt: 'desc' }],
+        take: 10,
+        select: {
+          id: true,
+          amount: true,
+          paymentDate: true,
+          paymentMethod: true,
+          reference: true,
+          periodLabel: true,
+          createdAt: true,
+          receipt: { select: { id: true, receiptNumber: true, voidedAt: true } },
+        },
+      }),
+    ]);
+
+    const today = todayUtc();
+    const totalCharged = this.finance.sum(rentRecords.map((record) => record.expectedAmount));
+    const totalPaid = this.finance.sum(rentRecords.map((record) => record.paidAmount));
+    const outstanding = this.finance.sum(rentRecords.map((record) => record.balance));
+    const overdueRecords = rentRecords.filter(
+      (record) => record.dueDate < today && !record.balance.isZero(),
+    );
+
     return {
       tenant,
       currentLease: current ?? null,
       leaseHistory: serialised,
       leaseCount: serialised.length,
-      // Named explicitly so the UI can say "arrives in Phase 4" rather than
-      // rendering a zero balance that would read as "nothing owed".
-      finances: { available: false, reason: 'Rent and payments arrive in Phase 4.' },
+      finances: {
+        available: true,
+        totalCharged: serialiseMoney(totalCharged),
+        totalPaid: serialiseMoney(totalPaid),
+        outstanding: serialiseMoney(outstanding),
+        overdue: serialiseMoney(this.finance.sum(overdueRecords.map((record) => record.balance))),
+        overdueCount: overdueRecords.length,
+        collectionRate: this.finance.collectionRate(totalCharged, totalPaid),
+        chargeCount: rentRecords.length,
+      },
+      // Capped at a year so a long-standing tenant's profile stays a page
+      // rather than a report; the rent roll is where the full history lives.
+      rentHistory: rentRecords.slice(0, 12).map((record) => ({
+        ...record,
+        expectedAmount: serialiseMoney(record.expectedAmount),
+        paidAmount: serialiseMoney(record.paidAmount),
+        balance: serialiseMoney(record.balance),
+      })),
+      recentPayments: payments.map((payment) => ({
+        ...payment,
+        amount: serialiseMoney(payment.amount),
+      })),
     };
   }
 
@@ -247,9 +314,9 @@ export class TenantsService {
   /**
    * Hard delete, and only for a tenant with no history at all.
    *
-   * Once someone has held a lease they are part of the record — from Phase 4,
-   * part of the financial record. Deactivating hides them; deleting is reserved
-   * for a row created by mistake.
+   * Once someone has held a lease they are part of the record, and every rent
+   * charge and payment hangs off that lease. Deactivating hides them; deleting
+   * is reserved for a row created by mistake.
    */
   async remove(id: string): Promise<void> {
     const auth = this.tenant.getOrThrow();

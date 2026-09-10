@@ -11,7 +11,7 @@ describe('lease dates', () => {
 
     it('keeps the same calendar day regardless of server timezone', () => {
       // The bug this prevents: `new Date('2026-01-01')` on a server west of UTC
-      // can land on 2025-12-31, shifting a lease — and from Phase 4, a rent
+      // can land on 2025-12-31, shifting a lease — and the rent
       // period — by a day.
       const original = process.env.TZ;
       try {

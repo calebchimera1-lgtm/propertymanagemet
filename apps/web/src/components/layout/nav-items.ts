@@ -1,6 +1,7 @@
 import {
   Blocks,
   Building2,
+  CircleDollarSign,
   DoorClosed,
   FileText,
   Home,
@@ -9,6 +10,7 @@ import {
   UserSquare2,
   Users,
   Wallet,
+  Wrench,
 } from 'lucide-react';
 import type { Permission } from '@pm/types';
 import type { LucideIcon } from 'lucide-react';
@@ -55,6 +57,15 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: 'Finance',
+    items: [
+      { label: 'Rent', href: '/rent', icon: Wallet, permission: 'rent.view' },
+      { label: 'Payments', href: '/payments', icon: CircleDollarSign, permission: 'payments.view' },
+      { label: 'Receipts', href: '/receipts', icon: Receipt, permission: 'receipts.view' },
+      { label: 'Expenses', href: '/expenses', icon: FileText, permission: 'expenses.view' },
+    ],
+  },
+  {
     label: 'Organization',
     items: [
       { label: 'Users', href: '/users', icon: Users, permission: 'staff.view' },
@@ -65,7 +76,7 @@ export const NAV_GROUPS: NavGroup[] = [
 
 /** Referenced by the dashboard's roadmap panel so the two never drift apart. */
 export const UPCOMING_SECTIONS = [
-  { label: 'Rent, payments and receipts', icon: Wallet, phase: 'Phase 4' },
-  { label: 'Expenses and maintenance', icon: Receipt, phase: 'Phase 4-5' },
-  { label: 'Dashboard metrics and reports', icon: FileText, phase: 'Phase 6' },
+  { label: 'Maintenance requests and work orders', icon: Wrench, phase: 'Phase 5' },
+  { label: 'Documents and file uploads', icon: FileText, phase: 'Phase 5' },
+  { label: 'Dashboard metrics and reports', icon: Receipt, phase: 'Phase 6' },
 ];

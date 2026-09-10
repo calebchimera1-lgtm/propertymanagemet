@@ -20,6 +20,10 @@ import {
   LEASE_STATUS_VARIANTS,
   expiryLabel,
 } from '@/features/occupancy/labels';
+import { RecordPaymentDialog } from '@/features/finance/components/record-payment-dialog';
+import { RENT_STATUS_LABELS, RENT_STATUS_VARIANTS } from '@/features/finance/labels';
+import { useRentRoll } from '@/features/finance/queries';
+import type { RentRecord } from '@/features/finance/types';
 import { useLease } from '@/features/occupancy/queries';
 import { ApiError } from '@/lib/api-client';
 import { formatDate, formatDateTime, formatMoney } from '@/lib/utils';
@@ -170,18 +174,7 @@ export default function LeaseDetailPage() {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Rent charges and payments</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Alert variant="info">
-            <AlertDescription>
-              Rent records, payments and receipts for this lease arrive in Phase 4.
-            </AlertDescription>
-          </Alert>
-        </CardContent>
-      </Card>
+      <LeaseRentCard leaseId={record.id} currency={currency} canRecordPayment={can('payments.create')} />
 
       {record.notes ? (
         <Card>
@@ -195,5 +188,91 @@ export default function LeaseDetailPage() {
       <RenewLeaseDialog open={renewOpen} onOpenChange={setRenewOpen} lease={record} />
       <TerminateLeaseDialog open={terminateOpen} onOpenChange={setTerminateOpen} lease={record} />
     </>
+  );
+}
+
+/**
+ * Rent charged against this lease, newest first.
+ *
+ * Fetched separately from the lease so the lease screen still renders if the
+ * user's role can see leases but not rent — a caretaker, for instance.
+ */
+function LeaseRentCard({
+  leaseId,
+  currency,
+  canRecordPayment,
+}: {
+  leaseId: string;
+  currency: string;
+  canRecordPayment: boolean;
+}) {
+  const [paying, setPaying] = useState<RentRecord | null>(null);
+  const rent = useRentRoll({ leaseId, limit: 12, sortBy: 'dueDate', sortOrder: 'desc' });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Rent charges</CardTitle>
+        <CardDescription>
+          The most recent twelve months billed against this lease.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {rent.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading charges…</p>
+        ) : rent.isError ? (
+          <Alert variant="destructive">
+            <AlertDescription>
+              {rent.error instanceof ApiError && rent.error.status === 403
+                ? 'You do not have permission to view rent.'
+                : 'Rent charges could not be loaded.'}
+            </AlertDescription>
+          </Alert>
+        ) : !rent.data || rent.data.data.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nothing has been charged against this lease yet. Charges are created from the rent
+            screen, one rental month at a time.
+          </p>
+        ) : (
+          <ul className="divide-y text-sm">
+            {rent.data.data.map((charge) => (
+              <li key={charge.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <div className="min-w-0">
+                  <div className="font-medium">{charge.periodLabel}</div>
+                  <div className="text-xs text-muted-foreground">
+                    Due {formatDate(charge.dueDate)}
+                    {charge.daysOverdue > 0 ? ` · ${charge.daysOverdue} days late` : ''}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <div className="tabular-nums">
+                      {formatMoney(charge.paidAmount, currency)} of{' '}
+                      {formatMoney(charge.expectedAmount, currency)}
+                    </div>
+                    <Badge variant={RENT_STATUS_VARIANTS[charge.status]} className="mt-1">
+                      {RENT_STATUS_LABELS[charge.status]}
+                    </Badge>
+                  </div>
+                  {canRecordPayment && charge.status !== 'PAID' ? (
+                    <Button size="sm" variant="outline" onClick={() => setPaying(charge)}>
+                      Record payment
+                    </Button>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+
+      {paying ? (
+        <RecordPaymentDialog
+          open={Boolean(paying)}
+          onOpenChange={(open) => !open && setPaying(null)}
+          rentRecord={paying}
+        />
+      ) : null}
+    </Card>
   );
 }

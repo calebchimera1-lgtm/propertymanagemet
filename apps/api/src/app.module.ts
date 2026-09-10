@@ -10,11 +10,15 @@ import { JobsModule } from '@/jobs/jobs.module';
 import { AuditLogsModule } from '@/modules/audit-logs/audit-logs.module';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { BuildingsModule } from '@/modules/buildings/buildings.module';
+import { ExpensesModule } from '@/modules/expenses/expenses.module';
 import { HealthModule } from '@/modules/health/health.module';
 import { LeasesModule } from '@/modules/leases/leases.module';
 import { OrganizationsModule } from '@/modules/organizations/organizations.module';
 import { PermissionsModule } from '@/modules/permissions/permissions.module';
 import { PropertiesModule } from '@/modules/properties/properties.module';
+import { PaymentsModule } from '@/modules/payments/payments.module';
+import { ReceiptsModule } from '@/modules/receipts/receipts.module';
+import { RentModule } from '@/modules/rent/rent.module';
 import { RolesModule } from '@/modules/roles/roles.module';
 import { TenantsModule } from '@/modules/tenants/tenants.module';
 import { UnitsModule } from '@/modules/units/units.module';
@@ -56,6 +60,10 @@ import { TenancyModule } from '@/tenancy/tenancy.module';
     UnitsModule,
     TenantsModule,
     LeasesModule,
+    RentModule,
+    PaymentsModule,
+    ReceiptsModule,
+    ExpensesModule,
     HealthModule,
     JobsModule,
   ],

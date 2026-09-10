@@ -3,7 +3,7 @@
  *
  * `startDate` and `endDate` are stored as SQL `DATE`. Parsing "2026-01-01" with
  * `new Date()` in a server running west of UTC yields the previous day, which
- * would shift a lease — and from Phase 4, a rent period — by one day. Always
+ * would shift a lease — and the rent period billed from it — by one day. Always
  * anchoring at UTC midnight keeps a date the same date everywhere.
  */
 export function parseDateOnly(value: string): Date {

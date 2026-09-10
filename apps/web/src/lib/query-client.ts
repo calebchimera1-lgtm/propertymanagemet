@@ -50,6 +50,18 @@ export const queryKeys = {
   leases: (params: Record<string, unknown> = {}) => ['leases', params] as const,
   lease: (id: string) => ['leases', 'detail', id] as const,
   expiringLeases: (days: number) => ['leases', 'expiring', days] as const,
+
+  rent: (params: Record<string, unknown> = {}) => ['rent', params] as const,
+  rentRecord: (id: string) => ['rent', 'detail', id] as const,
+  rentSummary: (params: Record<string, unknown> = {}) => ['rent', 'summary', params] as const,
+  outstandingRent: (params: Record<string, unknown> = {}) => ['rent', 'outstanding', params] as const,
+  payments: (params: Record<string, unknown> = {}) => ['payments', params] as const,
+  payment: (id: string) => ['payments', 'detail', id] as const,
+  receipts: (params: Record<string, unknown> = {}) => ['receipts', params] as const,
+  receipt: (id: string) => ['receipts', 'detail', id] as const,
+  expenses: (params: Record<string, unknown> = {}) => ['expenses', params] as const,
+  expense: (id: string) => ['expenses', 'detail', id] as const,
+  expenseSummary: (params: Record<string, unknown> = {}) => ['expenses', 'summary', params] as const,
 };
 
 /**
@@ -71,4 +83,19 @@ export const OCCUPANCY_ROOTS = [
   ['units'],
   ['properties'],
   ['buildings'],
+] as const;
+
+/**
+ * Recording a payment changes the rent roll, the payments list, the receipt
+ * register and the tenant's profile at once. Invalidating all of them together
+ * is what stops one screen showing a balance another screen has already
+ * collected.
+ */
+export const FINANCE_ROOTS = [
+  ['rent'],
+  ['payments'],
+  ['receipts'],
+  ['expenses'],
+  ['tenants'],
+  ['leases'],
 ] as const;
