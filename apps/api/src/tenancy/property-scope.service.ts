@@ -89,4 +89,15 @@ export class PropertyScopeService {
   get isRestricted(): boolean {
     return this.current() !== null;
   }
+
+  /**
+   * The scope as an id list, for raw SQL that cannot use a Prisma `where`.
+   *
+   * Returns null when unrestricted — callers must branch on that rather than
+   * treating an empty array as "no filter", which is the failure mode this
+   * whole layer exists to prevent.
+   */
+  get propertyIds(): string[] | null {
+    return this.current();
+  }
 }

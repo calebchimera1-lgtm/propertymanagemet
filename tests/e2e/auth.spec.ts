@@ -32,10 +32,10 @@ test.describe('Authentication', () => {
 
     await expect(page).toHaveURL(/\/dashboard/);
     await expect(page.getByRole('heading', { name: /Welcome, Test/ })).toBeVisible();
-    // The organization name appears in the sidebar and in the page subtitle;
-    // assert the one the user actually reads on both layouts.
+    // The organization name appears in the sidebar and in the dashboard
+    // subtitle; assert the one the user actually reads on both layouts.
     await expect(
-      page.getByText('Playwright Properties · KES · Africa/Nairobi'),
+      page.getByText(/Playwright Properties · every figure below is read from the database/),
     ).toBeVisible();
   });
 
@@ -113,12 +113,18 @@ test.describe('Authentication', () => {
     await page.getByRole('button', { name: 'Create organization' }).click();
     await expect(page).toHaveURL(/\/dashboard/);
 
-    // One real user, one real session — and an explicit statement that the
-    // not-yet-built sections are not built yet, rather than empty metric cards.
-    // The roadmap panel shrinks as phases ship: Phases 2 through 5 have
-    // landed, so the next unbuilt section named here is Phase 6.
-    await expect(page.getByText('People in your organization')).toBeVisible();
-    await expect(page.getByText('Phase 6').first()).toBeVisible();
+    // An organization with nothing in it shows real zeroes read from the
+    // database, and says that is what they are. Nothing here is a sample
+    // figure, a rounded guess or a chart drawn from made-up points.
+    await expect(page.getByText(/read from the database, not estimated/)).toBeVisible();
+    await expect(page.getByText('0 charges')).toBeVisible();
+    await expect(page.getByText('Nothing past its due date')).toBeVisible();
+    await expect(page.getByText('0 of 0 units')).toBeVisible();
+
+    // And the charts say they have nothing to draw rather than drawing a flat
+    // line through twelve months of zeroes, which reads as real data.
+    await expect(page.getByText('No charges in this window.')).toBeVisible();
+    await expect(page.getByText('No properties to compare yet.')).toBeVisible();
   });
 });
 

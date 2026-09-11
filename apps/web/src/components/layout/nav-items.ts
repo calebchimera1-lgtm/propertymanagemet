@@ -76,6 +76,10 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: 'Insights',
+    items: [{ label: 'Reports', href: '/reports', icon: BarChart3, permission: 'reports.view' }],
+  },
+  {
     label: 'Organization',
     items: [{ label: 'Settings', href: '/settings', icon: Settings, permission: 'settings.view' }],
   },
@@ -83,7 +87,7 @@ export const NAV_GROUPS: NavGroup[] = [
 
 /** Referenced by the dashboard's roadmap panel so the two never drift apart. */
 export const UPCOMING_SECTIONS = [
-  { label: 'Dashboard metrics and charts', icon: BarChart3, phase: 'Phase 6' },
-  { label: 'The nine reports, with CSV and PDF export', icon: FileText, phase: 'Phase 6' },
-  { label: 'Security hardening and accessibility pass', icon: Receipt, phase: 'Phase 7' },
+  { label: 'Security and authorization audit', icon: Receipt, phase: 'Phase 7' },
+  { label: 'Accessibility and performance pass', icon: FileText, phase: 'Phase 7' },
+  { label: 'Production deployment and runbook', icon: Blocks, phase: 'Phase 8' },
 ];

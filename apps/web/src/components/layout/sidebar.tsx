@@ -72,7 +72,7 @@ export function SidebarNav({ onNavigate }: SidebarProps) {
         })}
       </div>
 
-      <p className="px-3 text-xs text-muted-foreground">Version 1 · Phase 1</p>
+      <p className="px-3 text-xs text-muted-foreground">Version 1 · Phase 6</p>
     </nav>
   );
 }

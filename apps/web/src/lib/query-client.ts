@@ -75,6 +75,12 @@ export const queryKeys = {
   unreadNotifications: ['notifications', 'unread-count'] as const,
   auditLogs: (params: Record<string, unknown> = {}) => ['audit-logs', params] as const,
   auditActions: ['audit-logs', 'actions'] as const,
+
+  dashboardSummary: (params: Record<string, unknown> = {}) => ['dashboard', 'summary', params] as const,
+  dashboardCharts: (params: Record<string, unknown> = {}) => ['dashboard', 'charts', params] as const,
+  worklists: ['dashboard', 'worklists'] as const,
+  reportCatalogue: ['reports', 'catalogue'] as const,
+  report: (key: string, params: Record<string, unknown> = {}) => ['reports', key, params] as const,
 };
 
 /**
@@ -128,3 +134,12 @@ export const MAINTENANCE_ROOTS = [['maintenance'], ['notifications']] as const;
 export const STAFF_ROOTS = [['staff'], ['users'], ['properties']] as const;
 
 export const DOCUMENT_ROOTS = [['documents']] as const;
+
+/**
+ * The dashboard reads everything, so everything invalidates it.
+ *
+ * Added to the existing root sets rather than invalidated by hand at each call
+ * site: a payment that updated the rent roll but left a stale figure on the
+ * dashboard is exactly the disagreement this product must not have.
+ */
+export const INSIGHT_ROOTS = [['dashboard'], ['reports']] as const;

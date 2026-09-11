@@ -30,6 +30,7 @@
     "cookie-parser": "^1.4.7",
     "helmet": "^8.0.0",
     "nanoid": "^3.3.8",
+    "pdfkit": "^0.20.2",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "zod": "^3.24.1"
@@ -44,6 +45,7 @@
     "@types/jest": "^29.5.14",
     "@types/multer": "^2.2.0",
     "@types/node": "^22.10.5",
+    "@types/pdfkit": "^0.17.6",
     "@types/supertest": "^6.0.2",
     "@typescript-eslint/eslint-plugin": "^8.20.0",
     "@typescript-eslint/parser": "^8.20.0",

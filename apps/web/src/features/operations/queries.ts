@@ -3,6 +3,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   DOCUMENT_ROOTS,
+  INSIGHT_ROOTS,
   MAINTENANCE_ROOTS,
   STAFF_ROOTS,
   queryKeys,
@@ -11,10 +12,13 @@ import { operationsApi } from './api';
 
 type Query = Record<string, string | number | boolean | undefined>;
 
+/** Every operations write also refreshes the dashboard, which reads all of it. */
 function useInvalidation(roots: readonly (readonly string[])[]) {
   const queryClient = useQueryClient();
   return () => {
-    for (const key of roots) void queryClient.invalidateQueries({ queryKey: key });
+    for (const key of [...roots, ...INSIGHT_ROOTS]) {
+      void queryClient.invalidateQueries({ queryKey: key });
+    }
   };
 }
 

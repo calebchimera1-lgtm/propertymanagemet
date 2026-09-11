@@ -4,21 +4,22 @@ A multi-tenant property management platform for landlords, property owners, prop
 businesses running portfolios of properties, buildings, units, tenants, leases, rent, payments,
 expenses, maintenance, staff and documents.
 
-**Current state: Phase 5 (Operations) complete.** On top of the Phase 1 foundation (accounts,
-sessions, roles, permissions, audit trail), the Phase 2 portfolio (properties, buildings, units,
-property scoping), the Phase 3 occupancy layer (tenants, leases, expiry tracking) and the Phase 4
-money layer (rent generation, transactional payments, gapless receipts, expenses), the product now
-runs day to day: raise maintenance jobs and drive them through a validated workflow with a
-timeline behind every change; invite staff and choose which properties each of them may see;
-upload documents that are checked by their real contents and can only be fetched through an
-authorized download; receive in-app alerts; and read an audit trail nothing in the product can
-edit.
-Dashboard metrics and the nine reports arrive in Phase 6 — see
-[`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) §21.
+**Current state: Phase 6 (Dashboard, Reports & Export) complete.** On top of the Phase 1
+foundation (accounts, sessions, roles, permissions, audit trail), the Phase 2 portfolio
+(properties, buildings, units, property scoping), the Phase 3 occupancy layer (tenants, leases,
+expiry tracking), the Phase 4 money layer (rent generation, transactional payments, gapless
+receipts, expenses) and the Phase 5 operations layer (maintenance workflow, staff invites and
+scoping, validated document uploads, in-app alerts), the product now reports on itself: a
+dashboard of figures aggregated straight from the live database, six charts over twelve months,
+four worklists, nine filterable reports, and CSV and PDF downloads that run the same guards as
+the screen.
+
+Phase 6 adds no tables and no migration — every figure is a SQL aggregate over rows the earlier
+phases wrote.
 
 Phase notes: [`docs/PHASE-1.md`](docs/PHASE-1.md) · [`docs/PHASE-2.md`](docs/PHASE-2.md) ·
 [`docs/PHASE-3.md`](docs/PHASE-3.md) · [`docs/PHASE-4.md`](docs/PHASE-4.md) ·
-[`docs/PHASE-5.md`](docs/PHASE-5.md)
+[`docs/PHASE-5.md`](docs/PHASE-5.md) · [`docs/PHASE-6.md`](docs/PHASE-6.md)
 
 ---
 
@@ -286,7 +287,7 @@ the column.
 
 ## What is and is not built yet
 
-**Working now (Phases 1–5):** registration, sign-in/out, sessions and device revocation, password
+**Working now (Phases 1–6):** registration, sign-in/out, sessions and device revocation, password
 change and reset, email verification flow, organization and settings management, roles and
 permissions, the app shell and the audit trail; properties, buildings and units with full CRUD,
 archive-vs-delete rules, unit status handling, server-side search, filtering, sorting and
@@ -296,11 +297,12 @@ generation, payments recorded in a single locked transaction, gapless numbered r
 print view, payment voiding that reverses without deleting, and expense tracking by category;
 maintenance requests with a validated workflow and a full timeline, staff invitation with
 per-property assignments, document upload and authorized download, in-app notifications with
-daily sweeps, and an authorized read of the audit trail.
+daily sweeps, and an authorized read of the audit trail; and a dashboard of live aggregates with
+six charts and four worklists, nine filterable reports, and CSV and PDF export that runs the same
+organization and property-scope guards as the screen.
 
-**Deliberately not built yet:** dashboard metrics and charts, and the nine reports with CSV and
-PDF export. They are specified in the blueprint and scheduled in Phase 6, with a security and
-accessibility hardening pass in Phase 7.
+**Deliberately not built yet:** the security and accessibility hardening pass, performance work
+and deployment packaging, all scheduled for Phase 7.
 
 **Honest gaps in what is built:**
 
@@ -325,11 +327,16 @@ accessibility hardening pass in Phase 7.
   (rollover, refund on move-out) that belong in a version that implements them properly.
 - **No receipt email or PDF export.** A receipt prints from the browser; the printed page is the
   receipt and none of the app around it.
-- **No late fees, pro-rata or profit-and-loss report.** Rent is billed in whole months, `OVERDUE`
-  is reported but never charged for, and the reporting module — which is where net income belongs
-  — is Phase 6.
+- **No late fees and no pro-rata.** Rent is billed in whole months, and `OVERDUE` is reported but
+  never charged for. Net income is now reported (dashboard tile and the profit-and-loss report),
+  but it is collected income less recorded expenses — there is no accrual accounting here.
 - **Deposits are recorded, not ledgered.** `depositPaid` is tracked and capped at the security
   deposit; deductions and move-out refunds are out of V1 scope, and no rent payment is ever taken
   from a deposit.
 - **Password strength** is a policy check plus a small common-password blocklist, not full
   dictionary scoring. Deferred to Phase 7.
+- **Reports are not scheduled or emailed**, and there is no custom report builder or Excel
+  (`.xlsx`) writer. Nine fixed reports, CSV and PDF, run on demand.
+- **No caching or materialised views behind the dashboard.** Every figure is aggregated from the
+  live rows on each request, deliberately — a stored total is a second copy of the truth. Exports
+  are streamed and capped at 10,000 rows.

@@ -1,7 +1,7 @@
 'use client';
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FINANCE_ROOTS, queryKeys } from '@/lib/query-client';
+import { FINANCE_ROOTS, INSIGHT_ROOTS, queryKeys } from '@/lib/query-client';
 import { financeApi } from './api';
 
 type Query = Record<string, string | number | boolean | undefined>;
@@ -9,7 +9,7 @@ type Query = Record<string, string | number | boolean | undefined>;
 function useFinanceInvalidation() {
   const queryClient = useQueryClient();
   return () => {
-    for (const key of FINANCE_ROOTS) {
+    for (const key of [...FINANCE_ROOTS, ...INSIGHT_ROOTS]) {
       void queryClient.invalidateQueries({ queryKey: key });
     }
   };

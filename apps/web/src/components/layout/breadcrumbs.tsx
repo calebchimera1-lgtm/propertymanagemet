@@ -21,6 +21,7 @@ const LABELS: Record<string, string> = {
   staff: 'Staff',
   documents: 'Documents',
   notifications: 'Notifications',
+  reports: 'Reports',
 };
 
 /** A cuid segment is a record id, not a page name — show it as one. */
@@ -31,7 +32,10 @@ function isRecordId(segment: string): boolean {
 function labelFor(segment: string): string {
   if (LABELS[segment]) return LABELS[segment];
   if (isRecordId(segment)) return 'Details';
-  return segment.charAt(0).toUpperCase() + segment.slice(1);
+  // Report keys are slugs: "outstanding-rent" is a crumb reading
+  // "Outstanding rent", not "Outstanding-rent".
+  const words = segment.replace(/-/g, ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 export function Breadcrumbs() {

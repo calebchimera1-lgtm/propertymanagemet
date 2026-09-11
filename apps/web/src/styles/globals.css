@@ -80,6 +80,45 @@
   }
 }
 
+/*
+ * Chart tokens.
+ *
+ * Series colours are a validated categorical palette, not the UI accent colours
+ * — an accent chosen for buttons is not a colour anyone checked for
+ * colourblind separation. These three slots clear every gate in both modes
+ * against this app's own card surfaces (adjacent and all-pairs): worst CVD
+ * ΔE 9.2 light / 9.4 dark, worst normal-vision ΔE 24.0 light / 20.9 dark.
+ *
+ * The dark values are stepped for the dark surface, not an automatic flip of
+ * the light ones.
+ *
+ * Colour follows the entity, never its rank: "collected" is slot 1 on every
+ * chart, "expenses" is slot 2 on every chart. A filter that drops a series must
+ * never repaint the survivors.
+ */
+:root {
+  --viz-series-1: #2a78d6; /* collected, and any single money series */
+  --viz-series-2: #eb6834; /* expenses / expected */
+  --viz-series-3: #1baf7a; /* occupancy */
+  /* Diverging pair for above/below a baseline. Grey midpoint, never a hue. */
+  --viz-positive: #2a78d6;
+  --viz-negative: #e34948;
+  --viz-grid: #e1e0d9;
+  --viz-axis: #c3c2b7;
+  --viz-muted: #898781;
+}
+
+.dark {
+  --viz-series-1: #3987e5;
+  --viz-series-2: #d95926;
+  --viz-series-3: #199e70;
+  --viz-positive: #3987e5;
+  --viz-negative: #e66767;
+  --viz-grid: #2c2c2a;
+  --viz-axis: #383835;
+  --viz-muted: #898781;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
